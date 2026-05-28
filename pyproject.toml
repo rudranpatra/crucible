@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "crucible-gym"
+version = "0.1.0"
+description = "Adversarial Intelligence Engine for CI/CD Pipelines"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+authors = [
+  {name = "Crucible", email = "rudra.patra@brackt.ai"},
+]
+keywords = ["ci-cd", "adversarial", "testing", "devops", "chaos-engineering", "resilience"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Testing",
+  "Topic :: System :: Systems Administration",
+]
+requires-python = ">=3.9"
+dependencies = [
+  "pyyaml>=6.0",
+  "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.100.0", "uvicorn>=0.22.0"]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0", "black>=23.0.0", "mypy>=1.0.0", "ruff>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/brackt-ai/crucible"
+Repository = "https://github.com/brackt-ai/crucible"
+Issues = "https://github.com/brackt-ai/crucible/issues"
+Documentation = "https://github.com/brackt-ai/crucible#readme"
+
+[project.scripts]
+crucible = "cli.crucible:main"
+
+[tool.setuptools.packages.find]
+where = ["crucible"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["crucible/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
