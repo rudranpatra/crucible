@@ -46,27 +46,17 @@ crucible replay --trace trc_c003093279
 
 ## See it
 
-> **GIF coming** — record with `asciinema rec demo.cast && agg demo.cast demo.gif`
+![Crucible demo — kill screen, agent obituary, report card](../demo.svg)
 
-To record locally now:
+> Generated from a real run against the GitHub Actions Node.js CI starter workflow.
+> Run `python cli/crucible.py attack --demo --rich` to see it live in your terminal.
 
+**To record your own GIF:**
 ```bash
-# Install recorder
 pip install asciinema
-asciinema rec demo.cast
-
-# In the recording:
-python cli/crucible.py attack --demo --rich
-
-# Convert to GIF (requires agg: https://github.com/asciinema/agg)
-agg demo.cast demo.gif
+asciinema rec demo.cast -c "python cli/crucible.py attack --demo --rich"
+# Convert: agg demo.cast demo.gif  (https://github.com/asciinema/agg)
 ```
-
-The `--rich` mode shows:
-- Kill screens when vulnerabilities are found
-- Agent obituaries when fitness collapses
-- Score bar filling as attacks complete
-- Final report card with component breakdown
 
 ---
 
