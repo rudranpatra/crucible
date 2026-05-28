@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CRUCIBLE — Adversarial CI/CD Resilience Check
+# Copy this file to your repo's .github/workflows/ to get a Crucible score
+# posted on every pull request.
+#
+# Required secret: GITHUB_TOKEN (automatically available in Actions)
+# Optional: set PR_NUMBER if not using pull_request trigger
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Crucible Resilience Check
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  crucible:
+    name: 🔥 Crucible Attack
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Crucible
+        run: pip install crucible-gym
+
+      - name: Run Crucible
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          crucible attack \
+            --target .github/workflows/*.yml \
+            --github-comment \
+            --quiet
+
+      # Optional: fail the build if score is below threshold
+      # - name: Check score threshold
+      #   run: |
+      #     SCORE=$(crucible attack --target .github/workflows/*.yml --quiet 2>/dev/null | grep -oP '[\d.]+(?=/100)')
+      #     if (( $(echo "$SCORE < 50" | bc -l) )); then
+      #       echo "Resilience score $SCORE/100 is below threshold (50). Failing build."
+      #       exit 1
+      #     fi

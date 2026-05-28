@@ -1,0 +1,366 @@
+"""
+Crucible Runner
+Orchestrates a full adversarial attack run against a target pipeline.
+This is the only place that knows about all layers (engine, agents, scorer, memory, dashboard).
+"""
+
+import asyncio
+from typing import List, Optional, Dict
+from pathlib import Path
+
+from core.engine import CrucibleEngine
+from attacks.strategies import (
+    TimingAgent, EnvCorruptionAgent, StepReorderAgent,
+    NetworkChaosAgent, DependencyDriftAgent
+)
+from scoring.scorer import ResilienceScorer
+from scoring.darwin_scorer import DarwinScorer
+from memory.trace_memory import TraceMemory
+from integrations.github_actions.parser import GitHubActionsParser, create_demo_target
+
+
+ATTACK_REGISTRY = {
+    'timing': TimingAgent,
+    'env': EnvCorruptionAgent,
+    'reorder': StepReorderAgent,
+    'network': NetworkChaosAgent,
+    'dependency': DependencyDriftAgent,
+}
+
+ALL_ATTACKS = list(ATTACK_REGISTRY.keys())
+
+
+class CrucibleRunner:
+    """
+    Runs a complete adversarial attack cycle:
+    1. Parse target
+    2. Spawn agents
+    3. Execute attacks  (+ optional shadow tracking)
+    4. Score resilience (+ optional darwin scoring)
+    5. Store trace
+    6. Return report
+
+    Architecture rule: runner is the ONLY place that orchestrates all layers.
+    Engine, agents, scorer, memory don't import each other.
+    """
+
+    def __init__(
+        self,
+        traces_dir: str = "traces",
+        verbose: bool = True,
+        use_dashboard: bool = False,
+        use_shadow: bool = False,
+    ):
+        self.engine = CrucibleEngine()
+        self.scorer = ResilienceScorer()
+        self.memory = TraceMemory(traces_dir=traces_dir)
+        self.darwin = DarwinScorer(
+            state_file=str(Path(traces_dir) / "darwin_state.json")
+        )
+        self.verbose = verbose
+
+        self.dashboard = None
+        if use_dashboard:
+            from dashboard.terminal import CrucibleDashboard
+            self.dashboard = CrucibleDashboard()
+
+        self.shadow_runner = None
+        if use_shadow:
+            from core.shadow_runner import ShadowRunner
+            self.shadow_runner = ShadowRunner(self.engine)
+            self.shadow_runner.register_all(ATTACK_REGISTRY)
+
+    # ── Main run ──────────────────────────────────────────────────────────────
+
+    async def run(
+        self,
+        target_path: Optional[str] = None,
+        attacks: Optional[List[str]] = None,
+        tags: Optional[List[str]] = None,
+        demo_mode: bool = False,
+        github_comment: bool = False,
+    ) -> Dict:
+        attacks = attacks or ALL_ATTACKS
+        tags = tags or []
+
+        if demo_mode or not target_path:
+            target = create_demo_target()
+            self._log("Running in demo mode with synthetic CI/CD pipeline")
+        else:
+            parser = GitHubActionsParser()
+            target = parser.parse_file(target_path)
+            self._log(
+                f"Loaded target: {target['name']} "
+                f"({len(target['steps'])} steps, {len(attacks)} attack types)"
+            )
+
+        trace = self.engine.begin_trace(target['name'])
+
+        if self.dashboard:
+            self.dashboard.print_banner(target['name'], trace.trace_id)
+        else:
+            self._log(f"Trace ID: {trace.trace_id}")
+            self._log(f"Attack types: {', '.join(attacks)}")
+            self._log("")
+
+        all_results = []
+        agent_reflections = []
+        shadow_summary = {}
+
+        for attack_name in attacks:
+            if attack_name not in ATTACK_REGISTRY:
+                self._log(f"Unknown attack type: {attack_name} — skipping")
+                continue
+
+            agent_class = ATTACK_REGISTRY[attack_name]
+
+            if self.shadow_runner:
+                # Shadow mode: run paired production + shadow agents
+                comparison = await self.shadow_runner.run_attack(
+                    attack_name, target, trace
+                )
+                if comparison:
+                    prod = comparison.get("production", {})
+                    results = prod.get("results", [])
+                    agent_id = prod.get("agent_id", "unknown")
+                    shadow_summary[attack_name] = comparison
+
+                    if comparison.get("should_promote"):
+                        self.darwin.record_promotion(
+                            attack_name,
+                            comparison["shadow"]["trigger_rate"],
+                            comparison["production"]["trigger_rate"],
+                        )
+                        if self.dashboard:
+                            self.dashboard.print_shadow_promotion(
+                                attack_name,
+                                comparison["shadow"]["trigger_rate"],
+                                comparison["production"]["trigger_rate"],
+                            )
+                else:
+                    results = []
+            else:
+                # Standard mode
+                agent = agent_class(self.engine)
+                agent_id = agent.agent_id
+
+                if self.dashboard:
+                    self.dashboard.print_agent_deployed(
+                        agent_id, attack_name, agent.description
+                    )
+                else:
+                    self._log(f"Deploying {attack_name} agent [{agent_id}]...")
+                    self._log(f"  {agent.description}")
+
+                results = await agent.attack(target, trace)
+                agent_state = self.engine.agents[agent_id]
+
+                # Check for kill screens on critical hits
+                if self.dashboard:
+                    critical_hits = [r for r in results if r.failure_triggered]
+                    for hit in critical_hits[:1]:
+                        self.dashboard.print_kill_screen(
+                            agent_id, attack_name,
+                            hit.failure_description or "unknown failure",
+                            trace.trace_id,
+                        )
+
+                triggered = [r for r in results if r.failure_triggered]
+                fitness = agent_state.fitness_score
+                is_alive = agent_state.is_alive()
+
+                if self.dashboard:
+                    failure_descs = [
+                        r.failure_description for r in triggered if r.failure_description
+                    ]
+                    self.dashboard.print_attack_complete(
+                        agent_id, attack_name, len(results),
+                        len(triggered), fitness, is_alive, failure_descs
+                    )
+                    if not is_alive:
+                        self.dashboard.print_agent_obituary(
+                            agent_id, attack_name, fitness,
+                            len(results), len(triggered)
+                        )
+                else:
+                    self._log(
+                        f"  Mutations: {len(results)} | "
+                        f"Failures triggered: {len(triggered)}"
+                    )
+                    if triggered:
+                        for r in triggered[:2]:
+                            self._log(f"  ! {r.failure_description}")
+
+                reflection = agent.reflect(results)
+                agent_reflections.append(reflection)
+
+                trigger_rate = len(triggered) / max(1, len(results))
+                self.darwin.record_run(attack_name, trigger_rate)
+
+                if not is_alive:
+                    self._log(f"  Agent {agent_id} terminated. Fitness: {fitness}")
+                else:
+                    self._log(f"  Agent fitness: {fitness} [ALIVE]")
+                self._log("")
+
+            all_results.extend(results)
+
+            reflection = self.engine.agents.get(
+                list(self.engine.agents.keys())[-1]
+            )
+            if results:
+                agent_reflections.append({"attack_type": attack_name, "results": len(results)})
+
+        # ── Scoring ───────────────────────────────────────────────────────────
+
+        if self.dashboard:
+            self.dashboard.print_section("Scoring resilience...")
+        else:
+            self._log("Scoring resilience...")
+
+        attack_types_run = list(set(
+            r.mutation_applied.get('chaos_profile') and 'network'
+            or r.mutation_applied.get('variable') and 'env'
+            or r.mutation_applied.get('delay_ms') and 'timing'
+            or r.mutation_applied.get('drift_type') and 'dependency'
+            or r.mutation_applied.get('original_order') and 'reorder'
+            or 'unknown'
+            for r in all_results
+        ) - {'unknown'}) or attacks
+
+        report = self.scorer.score(all_results, attack_types_run)
+
+        failure_points = [
+            r.failure_description for r in all_results
+            if r.failure_triggered and r.failure_description
+        ]
+        blast_radius = list(set(
+            step
+            for r in all_results if r.failure_triggered
+            for step in r.affected_steps
+        ))
+
+        finalized = self.engine.finalize_trace(
+            trace,
+            score=report.score,
+            failure_points=failure_points,
+            blast_radius=blast_radius,
+        )
+
+        trace_dict = finalized.to_dict()
+        trace_dict['resilience_score'] = report.score
+        trace_dict['failure_points'] = failure_points
+        trace_dict['blast_radius'] = blast_radius
+        trace_dict['agent_reflections'] = agent_reflections
+
+        stored = self.memory.store(trace_dict, tags=tags)
+
+        result = {
+            "trace_id": finalized.trace_id,
+            "target": target['name'],
+            "resilience_score": report.score,
+            "grade": report.grade,
+            "components": report.components,
+            "failure_count": len(failure_points),
+            "blast_radius": blast_radius,
+            "top_vulnerabilities": report.top_vulnerabilities,
+            "replay_command": finalized.replay_command,
+            "engine_status": self.engine.engine_status(),
+            "agent_reflections": agent_reflections,
+            "shadow_summary": shadow_summary,
+        }
+
+        # ── Output ────────────────────────────────────────────────────────────
+
+        darwin_report = self.darwin.get_species_report() if self.darwin.state["species"] else None
+
+        if self.dashboard:
+            self.dashboard.print_score_update(report.score, report.grade)
+            self.dashboard.print_final_report(result, self.engine.engine_status(), darwin_report)
+        else:
+            self._log("=" * 50)
+            self._log(report.summary())
+            self._log("=" * 50)
+            self._log(f"\nTrace saved: {stored.replay_command}")
+
+            dead_agents = self.engine.get_dead_agents()
+            if dead_agents:
+                self._log(f"\nAgent cemetery: {len(dead_agents)} agent(s) terminated")
+                for dead in dead_agents:
+                    self._log(f"  RIP {dead.agent_id} — fitness: {dead.fitness_score}")
+
+        # ── GitHub PR comment ─────────────────────────────────────────────────
+
+        if github_comment:
+            self._post_github_comment(result)
+
+        return result
+
+    # ── Replay & patterns ─────────────────────────────────────────────────────
+
+    def replay(self, trace_id: str) -> Dict:
+        stored = self.memory.load(trace_id)
+        if not stored:
+            return {"error": f"Trace {trace_id} not found"}
+        return {
+            "trace_id": stored.trace_id,
+            "target": stored.target,
+            "attack_types": stored.attack_types,
+            "resilience_score": stored.resilience_score,
+            "failure_count": stored.failure_count,
+            "blast_radius": stored.blast_radius,
+            "failure_points": stored.failure_points,
+            "created_at": stored.created_at,
+            "replay_command": stored.replay_command,
+            "tags": stored.tags,
+        }
+
+    def patterns(self) -> Dict:
+        return self.memory.get_failure_patterns()
+
+    def evolution(self) -> Dict:
+        return {
+            "species": self.darwin.get_species_report(),
+            "dominant": self.darwin.get_dominant_species(),
+            "extinct": self.darwin.get_extinct_species(),
+            "promotions": self.darwin.get_evolutionary_log(),
+        }
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _log(self, msg: str):
+        if self.verbose and not self.dashboard:
+            print(msg)
+
+    def _post_github_comment(self, result: Dict):
+        try:
+            from integrations.github.commenter import GitHubCommenter
+            commenter = GitHubCommenter()
+            if commenter.is_configured():
+                ok = commenter.post_pr_comment(result)
+                if ok:
+                    self._log("GitHub PR comment posted.")
+                else:
+                    self._log("GitHub PR comment failed (check GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER).")
+            else:
+                self._log("GitHub commenter not configured (set GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER).")
+        except Exception as e:
+            self._log(f"GitHub comment error: {e}")
+
+
+async def main():
+    import sys
+    runner = CrucibleRunner()
+
+    if len(sys.argv) > 1 and sys.argv[1] == 'demo':
+        result = await runner.run(demo_mode=True)
+    elif len(sys.argv) > 1:
+        result = await runner.run(target_path=sys.argv[1])
+    else:
+        result = await runner.run(demo_mode=True)
+
+    return result
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

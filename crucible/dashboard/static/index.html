@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔥 Crucible Dashboard</title>
+  <style>
+    :root {
+      --red: #e05d44;
+      --orange: #fe7d37;
+      --yellow: #dfb317;
+      --green: #4c1;
+      --bg: #0d0d0d;
+      --surface: #161616;
+      --border: #2a2a2a;
+      --text: #e0e0e0;
+      --dim: #666;
+      --accent: #e05d44;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; }
+
+    .banner {
+      background: linear-gradient(135deg, #1a0000 0%, #2d0000 50%, #1a0000 100%);
+      border-bottom: 1px solid var(--accent);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .banner h1 { font-size: 20px; color: var(--accent); letter-spacing: 2px; }
+    .banner .subtitle { color: var(--dim); font-size: 11px; }
+    .badge { background: var(--accent); color: white; padding: 2px 8px; border-radius: 3px; font-size: 10px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      padding: 1px;
+    }
+    .card {
+      background: var(--surface);
+      padding: 20px;
+    }
+    .card-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--dim);
+      margin-bottom: 12px;
+    }
+    .stat { font-size: 36px; font-weight: bold; color: var(--text); }
+    .stat-sub { font-size: 11px; color: var(--dim); margin-top: 4px; }
+
+    .score-bar-wrap { margin-top: 8px; }
+    .score-bar-bg { background: #2a2a2a; height: 8px; border-radius: 4px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+
+    .main { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); }
+    .section { background: var(--surface); padding: 20px; }
+    .section-title { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: var(--accent); margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; padding: 4px 8px; }
+    td { padding: 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .grade { font-size: 24px; font-weight: bold; padding: 2px 8px; border-radius: 3px; }
+    .grade-A { color: #4c1; }
+    .grade-B { color: #97ca00; }
+    .grade-C { color: #dfb317; }
+    .grade-D { color: #fe7d37; }
+    .grade-F { color: #e05d44; }
+
+    .alive { color: #4c1; }
+    .dead { color: #e05d44; }
+    .tag { background: #2a2a2a; padding: 1px 6px; border-radius: 2px; font-size: 10px; margin-right: 4px; }
+
+    .trace-item { padding: 10px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .trace-item:hover { background: rgba(224,93,68,0.05); }
+    .trace-item:last-child { border-bottom: none; }
+    .trace-id { color: var(--dim); font-size: 10px; }
+    .trace-target { font-size: 12px; margin: 2px 0; }
+    .trace-meta { display: flex; gap: 12px; font-size: 10px; color: var(--dim); margin-top: 4px; }
+
+    .heatmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 4px; }
+    .heat-cell { padding: 8px; border-radius: 3px; text-align: center; }
+    .heat-label { font-size: 10px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .heat-count { font-size: 18px; font-weight: bold; }
+
+    .chart-area { height: 120px; position: relative; margin-top: 8px; }
+    canvas { width: 100% !important; }
+
+    .loading { color: var(--dim); text-align: center; padding: 24px; }
+    .error { color: var(--red); padding: 8px; font-size: 11px; }
+    .replay { background: #1a1a1a; border: 1px solid var(--border); padding: 8px 12px; border-radius: 3px; font-family: monospace; font-size: 11px; color: var(--dim); margin-top: 4px; }
+
+    .refresh-btn { background: transparent; border: 1px solid var(--border); color: var(--dim); padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; font-family: inherit; }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--text); }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .header-row .section-title { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+  </style>
+</head>
+<body>
+
+<div class="banner">
+  <div>
+    <h1>🔥 CRUCIBLE</h1>
+    <div class="subtitle">Adversarial Intelligence Engine for CI/CD</div>
+  </div>
+  <div class="badge">v0.1</div>
+  <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+    <span id="status-dot" style="width:8px;height:8px;border-radius:50%;background:#4c1;display:inline-block;"></span>
+    <span id="status-text" style="color:var(--dim);font-size:11px;">connecting...</span>
+  </div>
+</div>
+
+<!-- Stats row -->
+<div class="grid" id="stats-grid">
+  <div class="card">
+    <div class="card-title">Total Traces</div>
+    <div class="stat" id="stat-traces">—</div>
+    <div class="stat-sub">attack runs stored</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Avg Resilience Score</div>
+    <div class="stat" id="stat-score">—</div>
+    <div class="score-bar-wrap">
+      <div class="score-bar-bg"><div class="score-bar-fill" id="score-bar" style="width:0%;background:var(--yellow);"></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Score Trend</div>
+    <div class="stat" id="stat-trend">—</div>
+    <div class="stat-sub" id="stat-trend-sub"></div>
+  </div>
+</div>
+
+<!-- Main content -->
+<div class="main">
+  <!-- Traces -->
+  <div class="section">
+    <div class="header-row">
+      <div class="section-title">Recent Traces</div>
+      <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
+    </div>
+    <div id="traces-list"><div class="loading">Loading traces...</div></div>
+  </div>
+
+  <!-- Heatmap -->
+  <div class="section">
+    <div class="section-title">⚠ Vulnerability Heatmap</div>
+    <div id="heatmap-content"><div class="loading">Loading heatmap...</div></div>
+    <div style="margin-top:20px;">
+      <div class="section-title">Attack Failure Rates</div>
+      <table id="attack-rates-table">
+        <thead><tr><th>Attack Type</th><th>Failure Rate</th><th></th></tr></thead>
+        <tbody id="attack-rates-body"><tr><td colspan="3" class="loading">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = '';
+
+  async function fetchJSON(url) {
+    const r = await fetch(API + url);
+    if (!r.ok) throw new Error(r.statusText);
+    return r.json();
+  }
+
+  function scoreColor(s) {
+    if (s >= 75) return '#4c1';
+    if (s >= 60) return '#97ca00';
+    if (s >= 40) return '#dfb317';
+    return '#e05d44';
+  }
+
+  function gradeClass(g) { return 'grade-' + (g || 'F'); }
+
+  function timeAgo(ts) {
+    const d = (Date.now() / 1000) - ts;
+    if (d < 60) return 'just now';
+    if (d < 3600) return Math.floor(d/60) + 'm ago';
+    if (d < 86400) return Math.floor(d/3600) + 'h ago';
+    return Math.floor(d/86400) + 'd ago';
+  }
+
+  async function loadStatus() {
+    try {
+      const s = await fetchJSON('/api/status');
+      document.getElementById('stat-traces').textContent = s.traces;
+      const score = s.avg_score || 0;
+      document.getElementById('stat-score').textContent = score.toFixed(1) + '/100';
+      document.getElementById('score-bar').style.width = score + '%';
+      document.getElementById('score-bar').style.background = scoreColor(score);
+      const trend = s.trend || 'stable';
+      document.getElementById('stat-trend').textContent = trend.charAt(0).toUpperCase() + trend.slice(1);
+      document.getElementById('stat-trend-sub').textContent = 'across all runs';
+      document.getElementById('status-text').textContent = 'live';
+      document.getElementById('status-dot').style.background = '#4c1';
+    } catch(e) {
+      document.getElementById('status-text').textContent = 'offline';
+      document.getElementById('status-dot').style.background = '#e05d44';
+    }
+  }
+
+  async function loadTraces() {
+    const el = document.getElementById('traces-list');
+    try {
+      const traces = await fetchJSON('/api/traces?limit=15');
+      if (!traces.length) { el.innerHTML = '<div class="loading">No traces yet. Run <code>crucible attack --demo</code></div>'; return; }
+      el.innerHTML = traces.map(t => `
+        <div class="trace-item" onclick="showTrace('${t.trace_id}')">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="trace-target">${t.target}</div>
+            <span class="grade ${gradeClass(scoreToGrade(t.score))}">${t.score.toFixed(0)}</span>
+          </div>
+          <div class="trace-id">${t.trace_id}</div>
+          <div class="trace-meta">
+            <span>${t.attack_types.join(', ')}</span>
+            <span>${t.failures} failures</span>
+            <span>${timeAgo(t.created_at)}</span>
+          </div>
+        </div>
+      `).join('');
+    } catch(e) { el.innerHTML = '<div class="error">Failed to load traces</div>'; }
+  }
+
+  async function loadHeatmap() {
+    const el = document.getElementById('heatmap-content');
+    const tbody = document.getElementById('attack-rates-body');
+    try {
+      const data = await fetchJSON('/api/heatmap');
+      const steps = data.vulnerable_steps || [];
+      if (!steps.length) { el.innerHTML = '<div class="loading">No vulnerability data yet</div>'; }
+      else {
+        const max = steps[0]?.failure_count || 1;
+        el.innerHTML = '<div class="heatmap">' + steps.map(s => {
+          const intensity = s.failure_count / max;
+          const r = Math.floor(30 + intensity * 200);
+          const bg = `rgba(${r},${Math.floor(93*(1-intensity))},${Math.floor(68*(1-intensity))},${0.2 + intensity*0.6})`;
+          return `<div class="heat-cell" style="background:${bg};">
+            <div class="heat-label" title="${s.step}">${s.step}</div>
+            <div class="heat-count">${s.failure_count}</div>
+          </div>`;
+        }).join('') + '</div>';
+      }
+      const rates = data.attack_failure_rates || {};
+      tbody.innerHTML = Object.entries(rates).map(([type, rate]) => {
+        const pct = (rate * 100).toFixed(1);
+        const bar = `<div style="width:${rate*100}%;height:4px;background:${scoreColor((1-rate)*100)};border-radius:2px;"></div>`;
+        return `<tr><td>${type}</td><td>${pct}%</td><td style="width:100px;">${bar}</td></tr>`;
+      }).join('') || '<tr><td colspan="3" class="loading">No data</td></tr>';
+    } catch(e) { el.innerHTML = '<div class="error">Failed to load heatmap</div>'; }
+  }
+
+  async function showTrace(id) {
+    try {
+      const t = await fetchJSON('/api/traces/' + id);
+      const info = [
+        `Trace: ${t.trace_id}`,
+        `Target: ${t.target}`,
+        `Score: ${t.score}/100`,
+        `Failures: ${t.failures}`,
+        `Blast: ${(t.blast_radius||[]).join(', ') || 'contained'}`,
+        `Attacks: ${(t.attack_types||[]).join(', ')}`,
+      ].join('\n');
+      alert(info + '\n\nReplay:\n' + t.replay_command);
+    } catch(e) { alert('Failed to load trace'); }
+  }
+
+  function scoreToGrade(s) {
+    if (s >= 90) return 'A';
+    if (s >= 75) return 'B';
+    if (s >= 60) return 'C';
+    if (s >= 40) return 'D';
+    return 'F';
+  }
+
+  async function loadAll() {
+    await Promise.all([loadStatus(), loadTraces(), loadHeatmap()]);
+  }
+
+  loadAll();
+  setInterval(loadAll, 15000);
+</script>
+</body>
+</html>
