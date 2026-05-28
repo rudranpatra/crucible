@@ -36,6 +36,9 @@ crucible/traces/
 traces/
 *.crucible
 
+# Internal dev documents
+crucible/CLAUDE_CODE_PROMPT.md
+
 # IDE
 .idea/
 .vscode/
