@@ -5,6 +5,7 @@ This is the only place that knows about all layers (engine, agents, scorer, memo
 """
 
 import asyncio
+import random
 from typing import List, Optional, Dict
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from scoring.scorer import ResilienceScorer
 from scoring.darwin_scorer import DarwinScorer
 from memory.trace_memory import TraceMemory
 from integrations.github_actions.parser import GitHubActionsParser, create_demo_target
+from integrations.playwright.parser import PlaywrightParser
 
 
 ATTACK_REGISTRY = {
@@ -79,16 +81,20 @@ class CrucibleRunner:
         tags: Optional[List[str]] = None,
         demo_mode: bool = False,
         github_comment: bool = False,
+        seed: Optional[int] = None,
     ) -> Dict:
         attacks = attacks or ALL_ATTACKS
         tags = tags or []
+
+        if seed is None:
+            seed = random.randint(0, 2 ** 32 - 1)
+        random.seed(seed)
 
         if demo_mode or not target_path:
             target = create_demo_target()
             self._log("Running in demo mode with synthetic CI/CD pipeline")
         else:
-            parser = GitHubActionsParser()
-            target = parser.parse_file(target_path)
+            target = self._parse_target(target_path)
             self._log(
                 f"Loaded target: {target['name']} "
                 f"({len(target['steps'])} steps, {len(attacks)} attack types)"
@@ -252,6 +258,7 @@ class CrucibleRunner:
         trace_dict['failure_points'] = failure_points
         trace_dict['blast_radius'] = blast_radius
         trace_dict['agent_reflections'] = agent_reflections
+        trace_dict['seed'] = seed
 
         stored = self.memory.store(trace_dict, tags=tags)
 
@@ -268,6 +275,7 @@ class CrucibleRunner:
             "engine_status": self.engine.engine_status(),
             "agent_reflections": agent_reflections,
             "shadow_summary": shadow_summary,
+            "seed": seed,
         }
 
         # ── Output ────────────────────────────────────────────────────────────
@@ -313,6 +321,7 @@ class CrucibleRunner:
             "created_at": stored.created_at,
             "replay_command": stored.replay_command,
             "tags": stored.tags,
+            "seed": stored.raw_trace.get('seed'),
         }
 
     def patterns(self) -> Dict:
@@ -327,6 +336,15 @@ class CrucibleRunner:
         }
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _parse_target(self, target_path: str) -> Dict:
+        path = Path(target_path)
+        playwright_suffixes = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py"}
+
+        if path.suffix.lower() in playwright_suffixes:
+            return PlaywrightParser().parse_file(target_path)
+
+        return GitHubActionsParser().parse_file(target_path)
 
     def _log(self, msg: str):
         if self.verbose and not self.dashboard:

@@ -44,14 +44,16 @@ def cmd_attack(args):
         tags=args.tags.split(',') if args.tags else [],
         demo_mode=args.demo or not args.target,
         github_comment=getattr(args, 'github_comment', False),
+        seed=getattr(args, 'seed', None),
     ))
 
     if args.json:
-        # Remove non-serializable keys
         out = {k: v for k, v in result.items() if k != 'shadow_summary'}
         print(json.dumps(out, indent=2))
     elif args.quiet:
         print(f"{result['resilience_score']:.0f}/100 ({result['grade']}) — {result['trace_id']}")
+    elif not getattr(args, 'rich', False):
+        print(f"Seed: {result['seed']}  (re-run: --seed {result['seed']})")
 
 
 # ── replay ────────────────────────────────────────────────────────────────────
@@ -72,11 +74,19 @@ def cmd_replay(args):
     print(f"Score:      {result['resilience_score']}/100")
     print(f"Failures:   {result['failure_count']}")
     print(f"Blast:      {', '.join(result['blast_radius']) if result['blast_radius'] else 'contained'}")
+    if result.get('seed') is not None:
+        print(f"Seed:       {result['seed']}")
     if result.get('failure_points'):
         print("\nFailure points:")
         for fp in result['failure_points'][:5]:
             print(f"  ⚠  {fp}")
     print(f"\n{result['replay_command']}")
+    if result.get('seed') is not None:
+        attacks_str = ','.join(result.get('attack_types', []))
+        hint = f"crucible attack --seed {result['seed']}"
+        if attacks_str:
+            hint += f" --attacks {attacks_str}"
+        print(f"Reproduce:  {hint}")
 
 
 # ── patterns ──────────────────────────────────────────────────────────────────
@@ -261,6 +271,7 @@ examples:
     ap.add_argument('--shadow', action='store_true', help='Enable shadow agent evolutionary tracking')
     ap.add_argument('--github-comment', action='store_true', dest='github_comment',
                     help='Post resilience score as GitHub PR comment')
+    ap.add_argument('--seed', type=int, help='Fixed random seed for deterministic replay')
     ap.add_argument('--quiet', '-q', action='store_true', help='Suppress output (just print score)')
     ap.add_argument('--json', '-j', action='store_true', help='Output full result as JSON')
 
