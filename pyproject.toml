@@ -34,10 +34,10 @@ web = ["fastapi>=0.100.0", "uvicorn>=0.22.0"]
 dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0", "black>=23.0.0", "mypy>=1.0.0", "ruff>=0.1.0"]
 
 [project.urls]
-Homepage = "https://github.com/brackt-ai/crucible"
-Repository = "https://github.com/brackt-ai/crucible"
-Issues = "https://github.com/brackt-ai/crucible/issues"
-Documentation = "https://github.com/brackt-ai/crucible#readme"
+Homepage = "https://github.com/rudranpatra/crucible"
+Repository = "https://github.com/rudranpatra/crucible"
+Issues = "https://github.com/rudranpatra/crucible/issues"
+Documentation = "https://github.com/rudranpatra/crucible#readme"
 
 [project.scripts]
 crucible = "cli.crucible:main"
