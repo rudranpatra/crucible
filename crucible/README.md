@@ -8,7 +8,7 @@ Every run produces a replayable trace. Every trace compounds into operational fo
 
 **This is not a testing framework. It is evolutionary pressure applied to your infrastructure.**
 
-[![Tests](https://img.shields.io/badge/tests-92%20passing-brightgreen)](crucible/tests/)
+[![Tests](https://img.shields.io/badge/tests-93%20passing-brightgreen)](crucible/tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
@@ -18,7 +18,7 @@ Every run produces a replayable trace. Every trace compounds into operational fo
 
 We ran adversarial attacks against the **official GitHub Actions Node.js CI starter workflow** — the template used by millions of repos.
 
-Score: **75/100 (B)**. Four operational weaknesses found:
+Archived score: **75.9/100 (B)**. Four operational weaknesses found:
 
 | # | Finding | Attack | Blast radius |
 |---|---------|--------|--------------|
@@ -49,12 +49,12 @@ crucible replay --trace trc_c003093279
 ![Crucible demo — kill screen, agent obituary, report card](../demo.svg)
 
 > Generated from a real run against the GitHub Actions Node.js CI starter workflow.
-> Run `python cli/crucible.py attack --demo --rich` to see it live in your terminal.
+> Run `python3 cli/crucible.py attack --demo --rich` to see a fresh live run in your terminal. Demo scores vary because mutations are sampled.
 
 **To record your own GIF:**
 ```bash
 pip install asciinema
-asciinema rec demo.cast -c "python cli/crucible.py attack --demo --rich"
+asciinema rec demo.cast -c "python3 cli/crucible.py attack --demo --rich"
 # Convert: agg demo.cast demo.gif  (https://github.com/asciinema/agg)
 ```
 
@@ -69,10 +69,10 @@ cd crucible/crucible
 pip install -r requirements.txt
 
 # 2. Run demo (no workflow file needed)
-python runner.py demo
+python3 runner.py demo
 
 # 3. Attack a real workflow
-python cli/crucible.py attack --target .github/workflows/ci.yml --rich
+python3 cli/crucible.py attack --target .github/workflows/ci.yml --rich
 ```
 
 ---
@@ -102,30 +102,31 @@ The evolutionary pressure is the intelligence.
 
 ```bash
 # Attack
-python cli/crucible.py attack --demo                        # demo target
-python cli/crucible.py attack --demo --rich                 # rich terminal UI
-python cli/crucible.py attack --demo --shadow               # evolutionary shadow agents
-python cli/crucible.py attack --target workflow.yml         # real workflow
-python cli/crucible.py attack --demo --attacks timing,env   # specific types
-python cli/crucible.py attack --demo --github-comment       # post score to GitHub PR
-python cli/crucible.py attack --demo --quiet                # just score/100
-python cli/crucible.py attack --demo --json                 # full JSON output
+python3 cli/crucible.py attack --demo                       # demo target
+python3 cli/crucible.py attack --demo --rich                # rich terminal UI
+python3 cli/crucible.py attack --demo --shadow              # evolutionary shadow agents
+python3 cli/crucible.py attack --target workflow.yml        # real workflow
+python3 cli/crucible.py attack --demo --attacks timing,env  # specific types
+python3 cli/crucible.py attack --demo --seed 42             # deterministic — same seed → same score
+python3 cli/crucible.py attack --demo --github-comment      # post score to GitHub PR
+python3 cli/crucible.py attack --demo --quiet               # just score/100
+python3 cli/crucible.py attack --demo --json                # full JSON output
 
 # Traces
-python cli/crucible.py replay --trace trc_abc123            # replay a stored trace
-python cli/crucible.py patterns                             # failure patterns across runs
-python cli/crucible.py status                               # stored traces summary
+python3 cli/crucible.py replay --trace trc_abc123           # replay a stored trace
+python3 cli/crucible.py patterns                            # failure patterns across runs
+python3 cli/crucible.py status                              # stored traces summary
 
 # Evolution
-python cli/crucible.py evolution                            # species fitness, extinction log
+python3 cli/crucible.py evolution                           # species fitness, extinction log
 
 # Badge
-python cli/crucible.py badge --score 73 --output badge.svg  # README badge
-python cli/crucible.py badge --target workflow.yml -o b.svg # attack then badge
+python3 cli/crucible.py badge --score 73 --output badge.svg # README badge
+python3 cli/crucible.py badge --target workflow.yml -o b.svg # attack then badge
 
 # Web dashboard
-python cli/crucible.py serve                                # http://127.0.0.1:7331
-python cli/crucible.py serve --port 8080
+python3 cli/crucible.py serve                               # http://127.0.0.1:7331
+python3 cli/crucible.py serve --port 8080
 ```
 
 ---
@@ -179,7 +180,7 @@ Every agent has a fitness score (0–100). After each run:
 Every production agent spawns a shadow running alternative mutations on a copy of the target. Shadow never touches the real target.
 
 ```bash
-python cli/crucible.py attack --demo --shadow
+python3 cli/crucible.py attack --demo --shadow
 ```
 
 Shadow trigger rate > production rate by 20% for 3+ consecutive runs → shadow is **promoted**. Promotion is logged as an evolutionary event.
@@ -189,7 +190,7 @@ Shadow trigger rate > production rate by 20% for 3+ consecutive runs → shadow 
 Species fitness accumulates **across all runs** — not just the current one. Species that consistently find failures become dominant. Species that never do go extinct.
 
 ```bash
-python cli/crucible.py evolution
+python3 cli/crucible.py evolution
 # Species fitness, dominant/extinct status, generation, lineage depth
 ```
 
@@ -218,7 +219,7 @@ Every run writes a `.crucible` file to `traces/`:
 Replay the exact attack sequence:
 
 ```bash
-python cli/crucible.py replay --trace trc_c003093279
+python3 cli/crucible.py replay --trace trc_c003093279
 ```
 
 Traces are reproducible. Share them in postmortems. Use them to verify hardening.
@@ -244,7 +245,7 @@ Copy `.github/workflows/crucible-template.yml` from this repo into your project'
 ### Step 3 — Run
 
 ```bash
-python cli/crucible.py attack --target .github/workflows/ci.yml --github-comment
+python3 cli/crucible.py attack --target .github/workflows/ci.yml --github-comment
 ```
 
 Every PR gets a comment:
@@ -269,7 +270,7 @@ crucible replay --trace trc_c003093279
 ## README badge
 
 ```bash
-python cli/crucible.py badge --score 73 --output badge.svg
+python3 cli/crucible.py badge --score 73 --output badge.svg
 ```
 
 ```markdown
@@ -283,7 +284,7 @@ python cli/crucible.py badge --score 73 --output badge.svg
 Attack Playwright test suites directly — Crucible attacks the user flows themselves:
 
 ```bash
-python cli/crucible.py attack --target tests/checkout.spec.ts
+python3 cli/crucible.py attack --target tests/checkout.spec.ts
 ```
 
 Extracted attack surfaces:
@@ -298,7 +299,7 @@ Extracted attack surfaces:
 
 ```bash
 pip install fastapi uvicorn
-python cli/crucible.py serve
+python3 cli/crucible.py serve
 # Open http://127.0.0.1:7331
 ```
 
@@ -336,7 +337,7 @@ crucible/
 │   └── static/index.html   # Dashboard UI
 ├── runner.py               # Orchestrates all layers (the only file that knows everything)
 ├── cli/crucible.py         # CLI interface
-└── tests/                  # 92 passing tests
+└── tests/                  # 93 passing tests
 ```
 
 ---
@@ -365,13 +366,13 @@ pip install -r requirements.txt
 
 # Run all tests
 python3 -m pytest tests/ -v
-# 92 passed in ~7s
+# 93 passed in ~8s
 
 # Run demo
-python runner.py demo
+python3 runner.py demo
 
 # Run with rich UI
-python cli/crucible.py attack --demo --rich
+python3 cli/crucible.py attack --demo --rich
 ```
 
 Tests cover: engine, all 5 attack agents, resilience scorer, survival index scorer, shadow agent, shadow runner, terminal dashboard, GitHub commenter, SVG badge, Playwright parser, full end-to-end run.

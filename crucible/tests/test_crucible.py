@@ -137,3 +137,26 @@ class TestFullRun:
         replayed = runner.replay(trace_id)
         assert replayed['trace_id'] == trace_id
         assert replayed['resilience_score'] == result['resilience_score']
+        assert replayed['failure_count'] == result['failure_count']
+
+    @pytest.mark.asyncio
+    async def test_playwright_target_run(self, tmp_path):
+        target = tmp_path / "checkout.spec.ts"
+        target.write_text(
+            """
+import { test, expect } from '@playwright/test';
+
+test('checkout flow', async ({ page }) => {
+  await page.goto('https://example.com/checkout');
+  await page.click('#buy');
+  await page.waitForResponse('https://api.example.com/order');
+  expect(page.locator('.done')).toBeVisible();
+});
+"""
+        )
+
+        runner = CrucibleRunner(traces_dir=str(tmp_path / "traces"), verbose=False)
+        result = await runner.run(target_path=str(target), attacks=['timing', 'network'])
+
+        assert result['target'] == 'checkout.spec'
+        assert 'resilience_score' in result

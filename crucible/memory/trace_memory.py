@@ -47,7 +47,10 @@ class TraceMemory:
         tags = tags or []
 
         events = trace.get('events', [])
-        failure_count = sum(1 for e in events if e.get('status') == 'success')
+        failure_count = sum(
+            1 for e in events
+            if e.get('result', {}).get('failure_triggered') is True
+        )
 
         attack_types = list(set(e.get('attack_type') for e in events if e.get('attack_type')))
 
