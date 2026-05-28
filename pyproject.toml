@@ -9,7 +9,7 @@ description = "Adversarial Intelligence Engine for CI/CD Pipelines"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 authors = [
-  {name = "Crucible", email = "rudra.patra@brackt.ai"},
+  {name = "Rudra Patra", email = "rudran.patra@gmail.com"},
 ]
 keywords = ["ci-cd", "adversarial", "testing", "devops", "chaos-engineering", "resilience"]
 classifiers = [
