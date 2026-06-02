@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 web = ["fastapi>=0.100.0", "uvicorn>=0.22.0"]
-dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0", "black>=23.0.0", "mypy>=1.0.0", "ruff>=0.1.0"]
+dev = ["pytest>=7.0.0", "pytest-asyncio>=0.21.0", "black>=23.0.0", "mypy>=1.0.0", "ruff>=0.1.0", "pip-audit>=2.6.0"]
 
 [project.urls]
 Homepage = "https://github.com/rudranpatra/crucible"
@@ -40,10 +40,11 @@ Issues = "https://github.com/rudranpatra/crucible/issues"
 Documentation = "https://github.com/rudranpatra/crucible#readme"
 
 [project.scripts]
-crucible = "cli.crucible:main"
+crucible = "crucible.cli.crucible:main"
 
 [tool.setuptools.packages.find]
-where = ["crucible"]
+where = ["."]
+include = ["crucible*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -56,3 +57,6 @@ target-version = "py39"
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
+warn_unused_ignores = true
+warn_return_any = false
+no_implicit_optional = true

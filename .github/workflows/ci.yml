@@ -22,49 +22,74 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]" || pip install -r crucible/requirements.txt
+        run: pip install -e ".[dev,web]"
 
       - name: Run tests
         working-directory: crucible
         run: pytest tests/ -v --tb=short
 
   lint:
-    name: Lint
+    name: Lint & format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - run: pip install ruff
       - name: Ruff check
-        run: ruff check crucible/ --ignore E501,F401 || true
+        run: ruff check crucible/ --ignore E501
+
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -e ".[dev,web]"
+      - name: mypy
+        working-directory: crucible
+        run: mypy . --ignore-missing-imports --exclude tests/
+
+  security:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Audit dependencies
+        run: pip-audit -r crucible/requirements.txt
 
   crucible-self-check:
     name: Crucible attacks itself
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
       - name: Install
-        run: pip install -r crucible/requirements.txt
-      - name: Run Crucible against own workflow
+        run: pip install -e ".[web]"
+      - name: Run Crucible self-attack and post PR comment
         working-directory: crucible
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.number }}
-        run: |
-          python runner.py demo
-      - name: Post PR comment
-        working-directory: crucible
-        if: github.event.number != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}

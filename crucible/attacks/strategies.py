@@ -12,10 +12,8 @@ Each attack agent targets a specific failure class:
 
 import asyncio
 import random
-import time
 from typing import Dict, Any, List
 from agents.base_agent import BaseAdversarialAgent, AttackResult
-from core.engine import CrucibleEngine
 
 
 class TimingAgent(BaseAdversarialAgent):
@@ -147,9 +145,6 @@ class StepReorderAgent(BaseAdversarialAgent):
 
     async def apply_mutation(self, target: Dict, mutation: Dict) -> AttackResult:
         await asyncio.sleep(0.02)
-
-        swaps = mutation.get('swapped_pairs', [])
-        steps = target.get('steps', [])
 
         critical_steps = target.get('critical_order_steps', ['build', 'test', 'deploy'])
         mutated_order = mutation.get('mutated_order', [])

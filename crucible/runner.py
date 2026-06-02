@@ -5,20 +5,23 @@ This is the only place that knows about all layers (engine, agents, scorer, memo
 """
 
 import asyncio
+import logging
 import random
 from typing import List, Optional, Dict
 from pathlib import Path
 
-from core.engine import CrucibleEngine
-from attacks.strategies import (
+from core.engine import CrucibleEngine  # noqa: E402
+from attacks.strategies import (  # noqa: E402
     TimingAgent, EnvCorruptionAgent, StepReorderAgent,
     NetworkChaosAgent, DependencyDriftAgent
 )
-from scoring.scorer import ResilienceScorer
-from scoring.darwin_scorer import DarwinScorer
-from memory.trace_memory import TraceMemory
-from integrations.github_actions.parser import GitHubActionsParser, create_demo_target
-from integrations.playwright.parser import PlaywrightParser
+from scoring.scorer import ResilienceScorer  # noqa: E402
+from scoring.darwin_scorer import DarwinScorer  # noqa: E402
+from memory.trace_memory import TraceMemory  # noqa: E402
+from integrations.github_actions.parser import GitHubActionsParser, create_demo_target  # noqa: E402
+from integrations.playwright.parser import PlaywrightParser  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 ATTACK_REGISTRY = {
@@ -52,6 +55,7 @@ class CrucibleRunner:
         verbose: bool = True,
         use_dashboard: bool = False,
         use_shadow: bool = False,
+        agent_timeout: float = 30.0,
     ):
         self.engine = CrucibleEngine()
         self.scorer = ResilienceScorer()
@@ -60,6 +64,7 @@ class CrucibleRunner:
             state_file=str(Path(traces_dir) / "darwin_state.json")
         )
         self.verbose = verbose
+        self._agent_timeout = agent_timeout
 
         self.dashboard = None
         if use_dashboard:
@@ -113,24 +118,22 @@ class CrucibleRunner:
         agent_reflections = []
         shadow_summary = {}
 
+        # ── Filter unknown attack types upfront ───────────────────────────────
+        valid_attacks = []
         for attack_name in attacks:
             if attack_name not in ATTACK_REGISTRY:
                 self._log(f"Unknown attack type: {attack_name} — skipping")
-                continue
+            else:
+                valid_attacks.append(attack_name)
 
-            agent_class = ATTACK_REGISTRY[attack_name]
-
-            if self.shadow_runner:
-                # Shadow mode: run paired production + shadow agents
-                comparison = await self.shadow_runner.run_attack(
-                    attack_name, target, trace
-                )
+        if self.shadow_runner:
+            # Shadow mode: run sequentially (shadow runner manages its own pairing)
+            for attack_name in valid_attacks:
+                comparison = await self.shadow_runner.run_attack(attack_name, target, trace)
                 if comparison:
                     prod = comparison.get("production", {})
                     results = prod.get("results", [])
-                    agent_id = prod.get("agent_id", "unknown")
                     shadow_summary[attack_name] = comparison
-
                     if comparison.get("should_promote"):
                         self.darwin.record_promotion(
                             attack_name,
@@ -143,25 +146,51 @@ class CrucibleRunner:
                                 comparison["shadow"]["trigger_rate"],
                                 comparison["production"]["trigger_rate"],
                             )
-                else:
-                    results = []
-            else:
-                # Standard mode
-                agent = agent_class(self.engine)
-                agent_id = agent.agent_id
+                    all_results.extend(results)
+        else:
+            # Standard mode: spawn all agents, run attacks concurrently
+            agents_to_run = [
+                (name, ATTACK_REGISTRY[name](self.engine))
+                for name in valid_attacks
+            ]
 
+            for _, agent in agents_to_run:
                 if self.dashboard:
                     self.dashboard.print_agent_deployed(
-                        agent_id, attack_name, agent.description
+                        agent.agent_id, agent.attack_type, agent.description
                     )
                 else:
-                    self._log(f"Deploying {attack_name} agent [{agent_id}]...")
+                    self._log(f"Deploying {agent.attack_type} agent [{agent.agent_id}]...")
                     self._log(f"  {agent.description}")
 
-                results = await agent.attack(target, trace)
+            async def _run_one(attack_name: str, agent):
+                try:
+                    return attack_name, agent, await asyncio.wait_for(
+                        agent.attack(target, trace),
+                        timeout=self._agent_timeout,
+                    ), None
+                except asyncio.TimeoutError:
+                    logger.warning("agent_timeout agent_id=%s attack=%s", agent.agent_id, attack_name)
+                    return attack_name, agent, [], "timeout"
+                except Exception as exc:
+                    logger.exception("agent_error agent_id=%s attack=%s", agent.agent_id, attack_name)
+                    return attack_name, agent, [], str(exc)
+
+            gathered = await asyncio.gather(*[_run_one(n, a) for n, a in agents_to_run])
+
+            for attack_name, agent, results, error in gathered:
+                agent_id = agent.agent_id
                 agent_state = self.engine.agents[agent_id]
 
-                # Check for kill screens on critical hits
+                if error:
+                    self._log(f"  Agent {agent_id} [{attack_name}] aborted: {error}")
+                    all_results.extend(results)
+                    continue
+
+                triggered = [r for r in results if r.failure_triggered]
+                fitness = agent_state.fitness_score
+                is_alive = agent_state.is_alive()
+
                 if self.dashboard:
                     critical_hits = [r for r in results if r.failure_triggered]
                     for hit in critical_hits[:1]:
@@ -170,28 +199,18 @@ class CrucibleRunner:
                             hit.failure_description or "unknown failure",
                             trace.trace_id,
                         )
-
-                triggered = [r for r in results if r.failure_triggered]
-                fitness = agent_state.fitness_score
-                is_alive = agent_state.is_alive()
-
-                if self.dashboard:
-                    failure_descs = [
-                        r.failure_description for r in triggered if r.failure_description
-                    ]
+                    failure_descs = [r.failure_description for r in triggered if r.failure_description]
                     self.dashboard.print_attack_complete(
                         agent_id, attack_name, len(results),
                         len(triggered), fitness, is_alive, failure_descs
                     )
                     if not is_alive:
                         self.dashboard.print_agent_obituary(
-                            agent_id, attack_name, fitness,
-                            len(results), len(triggered)
+                            agent_id, attack_name, fitness, len(results), len(triggered)
                         )
                 else:
                     self._log(
-                        f"  Mutations: {len(results)} | "
-                        f"Failures triggered: {len(triggered)}"
+                        f"  Mutations: {len(results)} | Failures triggered: {len(triggered)}"
                     )
                     if triggered:
                         for r in triggered[:2]:
@@ -209,13 +228,7 @@ class CrucibleRunner:
                     self._log(f"  Agent fitness: {fitness} [ALIVE]")
                 self._log("")
 
-            all_results.extend(results)
-
-            reflection = self.engine.agents.get(
-                list(self.engine.agents.keys())[-1]
-            )
-            if results:
-                agent_reflections.append({"attack_type": attack_name, "results": len(results)})
+                all_results.extend(results)
 
         # ── Scoring ───────────────────────────────────────────────────────────
 
@@ -348,7 +361,7 @@ class CrucibleRunner:
 
     def _log(self, msg: str):
         if self.verbose and not self.dashboard:
-            print(msg)
+            logger.info(msg)
 
     def _post_github_comment(self, result: Dict):
         try:
