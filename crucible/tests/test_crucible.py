@@ -3,15 +3,14 @@ Crucible Test Suite
 Tests for core engine, attack agents, and scoring.
 """
 
-import asyncio
 import pytest
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.engine import CrucibleEngine, AttackStatus, AgentStatus
-from attacks.strategies import TimingAgent, EnvCorruptionAgent, StepReorderAgent, NetworkChaosAgent, DependencyDriftAgent
+from core.engine import CrucibleEngine
+from attacks.strategies import TimingAgent, EnvCorruptionAgent, NetworkChaosAgent, DependencyDriftAgent
 from scoring.scorer import ResilienceScorer
 from integrations.github_actions.parser import create_demo_target
 from runner import CrucibleRunner

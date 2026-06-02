@@ -4,13 +4,16 @@ All attack agents inherit from this. Each agent has a strategy,
 executes mutations, scores itself, and can be killed if underperforming.
 """
 
+import asyncio
+import logging
 import uuid
 import time
-import random
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Any, List, Optional
 from core.engine import AttackEvent, AttackStatus, ExecutionTrace, CrucibleEngine
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,9 +94,17 @@ class BaseAdversarialAgent(ABC):
                 }
                 results.append(result)
 
-            except Exception as e:
+            except asyncio.CancelledError:
                 event.status = AttackStatus.ABORTED
-                event.error = str(e)
+                event.error = "cancelled"
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "mutation_error agent=%s attack=%s event=%s",
+                    self.agent_id, self.attack_type, event_id,
+                )
+                event.status = AttackStatus.ABORTED
+                event.error = str(exc)
 
             self.engine.record_event(trace, event)
 

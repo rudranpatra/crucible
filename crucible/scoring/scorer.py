@@ -6,7 +6,6 @@ Scores decay over time — a 6-month-old score is marked stale.
 """
 
 import time
-import math
 from dataclasses import dataclass
 from typing import List, Dict, Optional
 from agents.base_agent import AttackResult

@@ -3,14 +3,15 @@ Crucible Core Execution Engine
 Manages the adversarial agent lifecycle, attack scheduling, and event loop.
 """
 
-import asyncio
+import logging
 import uuid
 import time
 import json
 from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
 from enum import Enum
-from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class AttackStatus(Enum):
@@ -133,11 +134,12 @@ class CrucibleEngine:
         return agent
 
     def kill_agent(self, agent_id: str, reason: str = "low_fitness"):
-        """Kill an underperforming agent. This is intentional and visible."""
         if agent_id in self.agents:
             self.agents[agent_id].status = AgentStatus.DEAD
-            print(f"[CRUCIBLE] Agent {agent_id} terminated. Reason: {reason}. "
-                  f"Final fitness: {self.agents[agent_id].fitness_score}")
+            logger.info(
+                "agent_terminated agent_id=%s reason=%s fitness=%s",
+                agent_id, reason, self.agents[agent_id].fitness_score,
+            )
 
     def begin_trace(self, target: str) -> ExecutionTrace:
         trace_id = f"trc_{uuid.uuid4().hex[:10]}"

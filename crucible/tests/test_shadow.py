@@ -1,6 +1,5 @@
 """Tests for shadow agent and shadow runner."""
 
-import asyncio
 import pytest
 import sys
 import os
@@ -64,7 +63,7 @@ class TestShadowAgent:
     @pytest.mark.asyncio
     async def test_promotion_requires_3_wins(self, engine, demo_target):
         shadow = ShadowAgent(EnvCorruptionAgent, engine)
-        trace = engine.begin_trace(demo_target['name'])
+        engine.begin_trace(demo_target['name'])
 
         # Force 3 shadow wins into history
         shadow.run_history = [
@@ -87,7 +86,6 @@ class TestShadowAgent:
     async def test_perturb_target_modifies_copy(self, engine, demo_target):
         shadow = ShadowAgent(TimingAgent, engine)
         import copy
-        original_timeout = demo_target['timeout_ms']
         perturbed = shadow._perturb_target(copy.deepcopy(demo_target))
         # Steps should be shuffled or timeout changed — at least one differs
         assert perturbed is not demo_target

@@ -2,7 +2,6 @@
 
 import os
 import sys
-import json
 import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -126,7 +125,6 @@ class TestDarwinScorer:
         for rate in [0.1, 0.3, 0.6]:
             darwin.record_run('timing', rate)
         sp = darwin.state['species']['timing']
-        from scoring.darwin_scorer import DarwinScorer as DS
         trend = darwin._trend(sp['fitness_history'])
         assert trend == 'improving'
 

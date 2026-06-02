@@ -4,15 +4,13 @@ Screenshot-worthy output: kill screens, agent obituaries, live progress, report 
 """
 
 import time
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.rule import Rule
-from rich.columns import Columns
-from rich.align import Align
 from rich import box
 
 
@@ -115,21 +113,21 @@ class CrucibleDashboard:
         """The death announcement — designed to be screenshot-worthy."""
         content = Text(justify="center")
         content.append("\n")
-        content.append(f"  Species: ", style="bold dim")
+        content.append("  Species: ", style="bold dim")
         content.append(attack_type.upper(), style="bold yellow")
-        content.append(f"   Agent: ", style="bold dim")
+        content.append("   Agent: ", style="bold dim")
         content.append(agent_id, style="dim")
         content.append("\n\n")
-        content.append(f"  Mutations attempted:  ", style="bold")
+        content.append("  Mutations attempted:  ", style="bold")
         content.append(str(mutations), style="white")
-        content.append(f"\n  Failures triggered:   ", style="bold")
+        content.append("\n  Failures triggered:   ", style="bold")
         content.append(str(triggered), style="white")
-        content.append(f"\n  Final fitness:        ", style="bold")
+        content.append("\n  Final fitness:        ", style="bold")
         content.append(f"{fitness:.1f} / 100", style="bold red")
-        content.append(f"\n\n  Cause: ", style="bold")
+        content.append("\n\n  Cause: ", style="bold")
         content.append("FITNESS COLLAPSE", style="bold red")
         content.append(f"\n  The pipeline survived every {attack_type} attack.", style="dim italic")
-        content.append(f"\n  This species line ends here.\n", style="dim italic")
+        content.append("\n  This species line ends here.\n", style="dim italic")
 
         self.console.print(
             Panel(
@@ -157,11 +155,11 @@ class CrucibleDashboard:
         content.append("\n")
         content.append("  CRITICAL VULNERABILITY FOUND\n", style="bold red")
         content.append("  ─────────────────────────────────────\n\n", style="dim")
-        content.append(f"  Agent:   ", style="bold")
+        content.append("  Agent:   ", style="bold")
         content.append(f"{agent_id}\n", style="cyan")
-        content.append(f"  Attack:  ", style="bold")
+        content.append("  Attack:  ", style="bold")
         content.append(f"{attack_type}\n", style="yellow")
-        content.append(f"  Kill:    ", style="bold")
+        content.append("  Kill:    ", style="bold")
         content.append(f"{failure_description}\n\n", style="red")
         content.append("  Replay this exact attack:\n", style="dim")
         content.append(f"  crucible replay --trace {trace_id}", style="bold cyan")
@@ -343,7 +341,7 @@ class CrucibleDashboard:
         content.append(f"\n  Species:  {attack_type}\n", style="bold")
         content.append(f"  Shadow trigger rate:      {shadow_rate:.1%}\n", style="green")
         content.append(f"  Production trigger rate:  {prod_rate:.1%}\n", style="yellow")
-        content.append(f"\n  Shadow agent staged for promotion.\n", style="bold green")
+        content.append("\n  Shadow agent staged for promotion.\n", style="bold green")
         self.console.print(Panel(
             content,
             title="[bold green]🧬 SHADOW PROMOTED[/]",

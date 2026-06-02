@@ -8,7 +8,7 @@ Supports: TypeScript (.spec.ts), JavaScript (.spec.js), Python (.py)
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 
 class PlaywrightParser:

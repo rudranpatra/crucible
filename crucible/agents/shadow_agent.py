@@ -8,7 +8,7 @@ for promotion — making this evolutionary, not just adversarial.
 import copy
 import random
 import time
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Type
 
 from agents.base_agent import BaseAdversarialAgent, AttackResult
 from core.engine import CrucibleEngine, ExecutionTrace

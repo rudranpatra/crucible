@@ -5,7 +5,6 @@ Traces are the core data asset — replayable, auditable, shareable.
 """
 
 import json
-import os
 import time
 import uuid
 from dataclasses import dataclass, asdict

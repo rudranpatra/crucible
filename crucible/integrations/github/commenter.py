@@ -5,10 +5,13 @@ This is the Codecov play: every PR gets a score, scores become culture.
 """
 
 import json
+import logging
 import os
 import urllib.request
 import urllib.error
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 BADGE_COLORS = {
@@ -51,7 +54,17 @@ class GitHubCommenter:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def is_configured(self) -> bool:
-        return bool(self.token and self.repo and self.pr_number)
+        missing = []
+        if not self.token:
+            missing.append("GITHUB_TOKEN")
+        if not self.repo:
+            missing.append("GITHUB_REPOSITORY")
+        if not self.pr_number:
+            missing.append("PR_NUMBER")
+        if missing:
+            logger.debug("GitHub commenter not configured — missing: %s", ", ".join(missing))
+            return False
+        return True
 
     def post_pr_comment(self, result: Dict) -> bool:
         """
@@ -131,24 +144,36 @@ class GitHubCommenter:
             for comment in data:
                 if self.MARKER in comment.get("body", ""):
                     return comment["id"]
+        except urllib.error.HTTPError as exc:
+            logger.warning("github_api_error op=list_comments status=%s", exc.code)
         except Exception:
-            pass
+            logger.warning("github_api_error op=list_comments", exc_info=True)
         return None
 
     def _create_comment(self, body: str) -> bool:
         url = f"{GITHUB_API}/repos/{self.repo}/issues/{self.pr_number}/comments"
         try:
             self._post(url, {"body": body})
+            logger.info("github_comment_posted repo=%s pr=%s", self.repo, self.pr_number)
             return True
+        except urllib.error.HTTPError as exc:
+            logger.error("github_api_error op=create_comment status=%s", exc.code)
+            return False
         except Exception:
+            logger.error("github_api_error op=create_comment", exc_info=True)
             return False
 
     def _update_comment(self, comment_id: int, body: str) -> bool:
         url = f"{GITHUB_API}/repos/{self.repo}/issues/comments/{comment_id}"
         try:
             self._patch(url, {"body": body})
+            logger.info("github_comment_updated comment_id=%s", comment_id)
             return True
+        except urllib.error.HTTPError as exc:
+            logger.error("github_api_error op=update_comment status=%s", exc.code)
+            return False
         except Exception:
+            logger.error("github_api_error op=update_comment", exc_info=True)
             return False
 
     def _get(self, url: str):

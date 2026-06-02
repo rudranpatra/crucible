@@ -19,6 +19,7 @@ Usage:
 import asyncio
 import argparse
 import json
+import logging
 import sys
 import os
 
@@ -103,7 +104,7 @@ def cmd_patterns(args):
         print("No traces found. Run 'crucible attack' first.")
         return
 
-    print(f"\nFailure Pattern Analysis")
+    print("\nFailure Pattern Analysis")
     print(f"Total traces:     {patterns['total_traces']}")
     print(f"Avg score:        {patterns['average_resilience_score']}/100")
     print(f"Trend:            {patterns['score_trend']}")
@@ -222,7 +223,7 @@ def cmd_status(args):
     print(f"Avg resilience:    {patterns.get('average_resilience_score', 'N/A')}/100")
     print(f"Score trend:       {patterns.get('score_trend', 'N/A')}")
     print(f"Attack types:      {', '.join(ALL_ATTACKS)}")
-    print(f"Traces dir:        ./traces/")
+    print("Traces dir:        ./traces/")
     dominant = evo.get('dominant', [])
     extinct = evo.get('extinct', [])
     if dominant:
@@ -234,10 +235,14 @@ def cmd_status(args):
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _score_to_grade(score: float) -> str:
-    if score >= 90: return 'A'
-    if score >= 75: return 'B'
-    if score >= 60: return 'C'
-    if score >= 40: return 'D'
+    if score >= 90:
+        return 'A'
+    if score >= 75:
+        return 'B'
+    if score >= 60:
+        return 'C'
+    if score >= 40:
+        return 'D'
     return 'F'
 
 
@@ -309,6 +314,9 @@ examples:
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
+    log_level = logging.WARNING if getattr(args, "quiet", False) else logging.INFO
+    logging.basicConfig(format="%(levelname)s %(name)s %(message)s", level=log_level)
 
     dispatch = {
         'attack': cmd_attack,

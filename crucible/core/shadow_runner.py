@@ -8,7 +8,7 @@ Engine, agents, scorer, memory don't know it exists.
 """
 
 import time
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Type
 
 from agents.base_agent import BaseAdversarialAgent
 from agents.shadow_agent import ShadowAgent

@@ -5,9 +5,8 @@ Produces attack-ready workflow representations.
 """
 
 import yaml
-import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, List
 
 
 class GitHubActionsParser:
