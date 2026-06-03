@@ -1,5 +1,7 @@
 # Contributing to Crucible
 
+**Maintainer:** [rudranpatra](https://github.com/rudranpatra)
+
 Thank you for your interest. Crucible is an adversarial CI/CD testing engine and contributions are welcome.
 
 ## Ground rules
