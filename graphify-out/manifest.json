@@ -1,0 +1,247 @@
+{
+  "crucible/__init__.py": {
+    "mtime": 1779938578.0,
+    "ast_hash": "2b0e2fe38cde1f3ea55f2b500ee8f89e",
+    "semantic_hash": "2b0e2fe38cde1f3ea55f2b500ee8f89e"
+  },
+  "crucible/agents/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/agents/base_agent.py": {
+    "mtime": 1780391169.4860022,
+    "ast_hash": "6f0708570fcd6699ce36f7d897609401",
+    "semantic_hash": "6f0708570fcd6699ce36f7d897609401"
+  },
+  "crucible/agents/shadow_agent.py": {
+    "mtime": 1780396297.4740887,
+    "ast_hash": "ad318b905a0add3ed09bd0e9e10f3de5",
+    "semantic_hash": "ad318b905a0add3ed09bd0e9e10f3de5"
+  },
+  "crucible/attacks/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/attacks/strategies.py": {
+    "mtime": 1780396315.8473527,
+    "ast_hash": "566c9a9c155f3812a1351203bcb46954",
+    "semantic_hash": "566c9a9c155f3812a1351203bcb46954"
+  },
+  "crucible/cli/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/cli/crucible.py": {
+    "mtime": 1780396321.6971214,
+    "ast_hash": "675d2167bc116e200e60464875792346",
+    "semantic_hash": "675d2167bc116e200e60464875792346"
+  },
+  "crucible/core/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/core/engine.py": {
+    "mtime": 1780391028.3171215,
+    "ast_hash": "656330c8957388819b86072c349b1870",
+    "semantic_hash": "656330c8957388819b86072c349b1870"
+  },
+  "crucible/core/shadow_runner.py": {
+    "mtime": 1780396297.44409,
+    "ast_hash": "12c43ebafba05bddb458ee2586926f47",
+    "semantic_hash": "12c43ebafba05bddb458ee2586926f47"
+  },
+  "crucible/dashboard/__init__.py": {
+    "mtime": 1779940332.090822,
+    "ast_hash": "86aa8970d9e0a43641d9f97b5c8ce68c",
+    "semantic_hash": "86aa8970d9e0a43641d9f97b5c8ce68c"
+  },
+  "crucible/dashboard/server.py": {
+    "mtime": 1780396346.712149,
+    "ast_hash": "19e731ca5e7d670664b0cf613762c14b",
+    "semantic_hash": "19e731ca5e7d670664b0cf613762c14b"
+  },
+  "crucible/dashboard/terminal.py": {
+    "mtime": 1780396297.4810884,
+    "ast_hash": "d476e0d00f60f76ef42a5f48b51400ef",
+    "semantic_hash": "d476e0d00f60f76ef42a5f48b51400ef"
+  },
+  "crucible/integrations/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/integrations/github/__init__.py": {
+    "mtime": 1779940392.0704772,
+    "ast_hash": "e6386ef79857af96f984db6b1f5c36f3",
+    "semantic_hash": "e6386ef79857af96f984db6b1f5c36f3"
+  },
+  "crucible/integrations/github/commenter.py": {
+    "mtime": 1780393009.918907,
+    "ast_hash": "9f96de4e807dc48f672159c0edae7745",
+    "semantic_hash": "9f96de4e807dc48f672159c0edae7745"
+  },
+  "crucible/integrations/github_actions/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/integrations/github_actions/parser.py": {
+    "mtime": 1780396297.4490898,
+    "ast_hash": "f79cabcb75c4c0f365fc2ea3f174e7d6",
+    "semantic_hash": "f79cabcb75c4c0f365fc2ea3f174e7d6"
+  },
+  "crucible/integrations/playwright/__init__.py": {
+    "mtime": 1779940450.9791834,
+    "ast_hash": "55a167458e2d5babe3dd0146c51fff97",
+    "semantic_hash": "55a167458e2d5babe3dd0146c51fff97"
+  },
+  "crucible/integrations/playwright/parser.py": {
+    "mtime": 1780396297.4540894,
+    "ast_hash": "56ce4eb40440125a44f29a3aaf26bea7",
+    "semantic_hash": "56ce4eb40440125a44f29a3aaf26bea7"
+  },
+  "crucible/memory/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/memory/trace_memory.py": {
+    "mtime": 1780396297.494088,
+    "ast_hash": "7b9b9118447419f3a7b89f2c3931a98c",
+    "semantic_hash": "7b9b9118447419f3a7b89f2c3931a98c"
+  },
+  "crucible/runner.py": {
+    "mtime": 1780396342.1783233,
+    "ast_hash": "3eae1343411ed62c09be714b77adcd42",
+    "semantic_hash": "3eae1343411ed62c09be714b77adcd42"
+  },
+  "crucible/scoring/__init__.py": {
+    "mtime": 1779938582.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/scoring/darwin_scorer.py": {
+    "mtime": 1779941588.0048692,
+    "ast_hash": "6fa2f79257d87e20db2aec904641171c",
+    "semantic_hash": "6fa2f79257d87e20db2aec904641171c"
+  },
+  "crucible/scoring/scorer.py": {
+    "mtime": 1780396297.4460897,
+    "ast_hash": "27e19e4fb27fb7fbdb524a230422955a",
+    "semantic_hash": "27e19e4fb27fb7fbdb524a230422955a"
+  },
+  "crucible/tests/__init__.py": {
+    "mtime": 1779938613.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "crucible/tests/test_crucible.py": {
+    "mtime": 1780396297.494088,
+    "ast_hash": "437f5938d36be0e14436bfe6f299c4cd",
+    "semantic_hash": "437f5938d36be0e14436bfe6f299c4cd"
+  },
+  "crucible/tests/test_darwin.py": {
+    "mtime": 1780396297.5020876,
+    "ast_hash": "e8bd5575751bdec72746530481ed4a4a",
+    "semantic_hash": "e8bd5575751bdec72746530481ed4a4a"
+  },
+  "crucible/tests/test_dashboard.py": {
+    "mtime": 1779941276.5647726,
+    "ast_hash": "34e1c4f9d7f99e7553394b622387ab7c",
+    "semantic_hash": "34e1c4f9d7f99e7553394b622387ab7c"
+  },
+  "crucible/tests/test_integrations.py": {
+    "mtime": 1779941472.9328148,
+    "ast_hash": "1f2fe74b237e8d9643733bb64e201e82",
+    "semantic_hash": "1f2fe74b237e8d9643733bb64e201e82"
+  },
+  "crucible/tests/test_shadow.py": {
+    "mtime": 1780396363.5235097,
+    "ast_hash": "04299d0d3b32e1363a66769818d968e6",
+    "semantic_hash": "04299d0d3b32e1363a66769818d968e6"
+  },
+  "pyproject.toml": {
+    "mtime": 1780392096.4751685,
+    "ast_hash": "1da3c40c5c7f0b20a38c86c89152caf6",
+    "semantic_hash": "1da3c40c5c7f0b20a38c86c89152caf6"
+  },
+  "scripts/generate_demo_svg.py": {
+    "mtime": 1779943923.4346259,
+    "ast_hash": "465e1e13baed6936e6a9fe56ea8d22dc",
+    "semantic_hash": "465e1e13baed6936e6a9fe56ea8d22dc"
+  },
+  "scripts/record_demo.sh": {
+    "mtime": 1779943277.2039788,
+    "ast_hash": "80cc3ca88e0d6244178743ee9167975c",
+    "semantic_hash": "80cc3ca88e0d6244178743ee9167975c"
+  },
+  ".github/ISSUE_TEMPLATE/bug_report.md": {
+    "mtime": 1780392948.1513555,
+    "ast_hash": "a4f3a655a9132d5179690238f6451ff0",
+    "semantic_hash": "a4f3a655a9132d5179690238f6451ff0"
+  },
+  ".github/ISSUE_TEMPLATE/feature_request.md": {
+    "mtime": 1780392954.737308,
+    "ast_hash": "0b9c897f7d86c65c95a806e184959201",
+    "semantic_hash": "0b9c897f7d86c65c95a806e184959201"
+  },
+  ".github/PULL_REQUEST_TEMPLATE.md": {
+    "mtime": 1780392961.6362581,
+    "ast_hash": "cbe4f7aaf45ba99ec6050b86b4c9e3ee",
+    "semantic_hash": "cbe4f7aaf45ba99ec6050b86b4c9e3ee"
+  },
+  ".github/workflows/ci.yml": {
+    "mtime": 1780392209.128773,
+    "ast_hash": "61bf9af18cccda057fa74a77add7a801",
+    "semantic_hash": "61bf9af18cccda057fa74a77add7a801"
+  },
+  ".github/workflows/crucible-template.yml": {
+    "mtime": 1779941244.6097732,
+    "ast_hash": "0286eb51f19fcaaa87e1b409b45792f6",
+    "semantic_hash": "0286eb51f19fcaaa87e1b409b45792f6"
+  },
+  "CHANGELOG.md": {
+    "mtime": 1780392903.6846738,
+    "ast_hash": "3af5dd4bae1260b1318aa76d84d122c3",
+    "semantic_hash": "3af5dd4bae1260b1318aa76d84d122c3"
+  },
+  "CODE_OF_CONDUCT.md": {
+    "mtime": 1780392927.9885004,
+    "ast_hash": "a851b00efba7010d9e4b314ad85b8cf2",
+    "semantic_hash": "a851b00efba7010d9e4b314ad85b8cf2"
+  },
+  "CONTRIBUTING.md": {
+    "mtime": 1780485077.6838748,
+    "ast_hash": "ef29c0f968c15e16737de0c1b66fff4c",
+    "semantic_hash": "ef29c0f968c15e16737de0c1b66fff4c"
+  },
+  "README.md": {
+    "mtime": 1780485740.6337254,
+    "ast_hash": "40334995ca3b085d141b3cdeb1bde429",
+    "semantic_hash": "40334995ca3b085d141b3cdeb1bde429"
+  },
+  "crucible/README.md": {
+    "mtime": 1779978379.2038164,
+    "ast_hash": "b54de0812bfb1bb1e267cb8857466236",
+    "semantic_hash": "b54de0812bfb1bb1e267cb8857466236"
+  },
+  "crucible/dashboard/static/index.html": {
+    "mtime": 1779940782.1251552,
+    "ast_hash": "06aaed9b47b190e47f244832a24949ea",
+    "semantic_hash": "06aaed9b47b190e47f244832a24949ea"
+  },
+  "crucible/requirements.txt": {
+    "mtime": 1779941094.2328115,
+    "ast_hash": "b641cd28d507c766e0cc52993890ab14",
+    "semantic_hash": "b641cd28d507c766e0cc52993890ab14"
+  },
+  "demo.svg": {
+    "mtime": 1779943932.6520576,
+    "ast_hash": "1156f004a9efa764a2ac679d98f97c68",
+    "semantic_hash": "1156f004a9efa764a2ac679d98f97c68"
+  }
+}

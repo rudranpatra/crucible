@@ -85,7 +85,7 @@ class ResilienceScorer:
 
         recovery_score = self._score_recovery(triggered)
 
-        all_attack_types = {'timing', 'env', 'reorder', 'network', 'dependency'}
+        all_attack_types = {'timing', 'env', 'reorder', 'network', 'dependency', 'supply_chain'}
         coverage_score = (len(set(attack_types_run)) / len(all_attack_types)) * 100
 
         components = {
@@ -179,7 +179,18 @@ class ResilienceScorer:
         if unpinned:
             vulns.append(f"Dependency vulnerability: {len(unpinned)} unpinned packages found")
 
-        missing_types = {'timing', 'env', 'reorder', 'network', 'dependency'} - set(attack_types)
+        sc_failures = [r for r in triggered if r.mutation_applied.get('finding_type')]
+        if sc_failures:
+            critical = [r for r in sc_failures if r.mutation_applied.get('severity') == 'critical']
+            high = [r for r in sc_failures if r.mutation_applied.get('severity') == 'high']
+            if critical:
+                types = ', '.join(set(r.mutation_applied['finding_type'] for r in critical))
+                vulns.append(f"CRITICAL supply chain: {types} — requires immediate remediation")
+            elif high:
+                types = ', '.join(set(r.mutation_applied['finding_type'] for r in high))
+                vulns.append(f"Supply chain: {types} — high-severity findings")
+
+        missing_types = {'timing', 'env', 'reorder', 'network', 'dependency', 'supply_chain'} - set(attack_types)
         if missing_types:
             vulns.append(f"Coverage gap: untested attack surfaces — {', '.join(missing_types)}")
 

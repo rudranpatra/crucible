@@ -6,10 +6,27 @@ Agents aren't scored on one performance — they're scored on their entire lifet
 Species that consistently trigger failures dominate. Species that don't, go extinct.
 """
 
+import fcntl
 import json
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
+
+
+class _FileLock:
+    """Cross-process exclusive file lock using fcntl. Prevents concurrent write corruption."""
+    def __init__(self, path: Path):
+        self._lock_path = path.with_suffix('.lock')
+        self._fh = None
+
+    def __enter__(self):
+        self._fh = open(self._lock_path, 'w')
+        fcntl.flock(self._fh, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *_):
+        fcntl.flock(self._fh, fcntl.LOCK_UN)
+        self._fh.close()
 
 
 class DarwinScorer:
@@ -160,13 +177,17 @@ class DarwinScorer:
     def _load(self) -> Dict:
         if self.state_file.exists():
             try:
-                with open(self.state_file) as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, KeyError):
+                with _FileLock(self.state_file):
+                    with open(self.state_file) as f:
+                        return json.load(f)
+            except (json.JSONDecodeError, KeyError, OSError):
                 pass
         return {"species": {}, "promotions": [], "extinct": []}
 
     def save(self):
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.state_file, "w") as f:
-            json.dump(self.state, f, indent=2)
+        tmp = self.state_file.with_suffix('.tmp')
+        with _FileLock(self.state_file):
+            with open(tmp, 'w') as f:
+                json.dump(self.state, f, indent=2)
+            tmp.replace(self.state_file)

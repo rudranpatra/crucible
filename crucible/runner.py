@@ -13,7 +13,7 @@ from pathlib import Path
 from core.engine import CrucibleEngine  # noqa: E402
 from attacks.strategies import (  # noqa: E402
     TimingAgent, EnvCorruptionAgent, StepReorderAgent,
-    NetworkChaosAgent, DependencyDriftAgent
+    NetworkChaosAgent, DependencyDriftAgent, SupplyChainAgent
 )
 from scoring.scorer import ResilienceScorer  # noqa: E402
 from scoring.darwin_scorer import DarwinScorer  # noqa: E402
@@ -30,6 +30,7 @@ ATTACK_REGISTRY = {
     'reorder': StepReorderAgent,
     'network': NetworkChaosAgent,
     'dependency': DependencyDriftAgent,
+    'supply_chain': SupplyChainAgent,
 }
 
 ALL_ATTACKS = list(ATTACK_REGISTRY.keys())
@@ -237,15 +238,7 @@ class CrucibleRunner:
         else:
             self._log("Scoring resilience...")
 
-        attack_types_run = list(set(
-            r.mutation_applied.get('chaos_profile') and 'network'
-            or r.mutation_applied.get('variable') and 'env'
-            or r.mutation_applied.get('delay_ms') and 'timing'
-            or r.mutation_applied.get('drift_type') and 'dependency'
-            or r.mutation_applied.get('original_order') and 'reorder'
-            or 'unknown'
-            for r in all_results
-        ) - {'unknown'}) or attacks
+        attack_types_run = list(set(r.attack_type for r in all_results if r.attack_type)) or attacks
 
         report = self.scorer.score(all_results, attack_types_run)
 

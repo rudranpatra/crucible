@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crucible — Launch Posts</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #e8e8e8;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+
+  .page-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    margin-bottom: 0.3rem;
+    letter-spacing: 0.04em;
+  }
+  .page-sub {
+    font-size: 0.72rem;
+    color: #444;
+    text-align: center;
+    margin-bottom: 2rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .posts {
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+    max-width: 740px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1.2rem;
+    border-bottom: 1px solid #191919;
+    background: #0e0e0e;
+  }
+
+  .platform-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.18rem 0.5rem;
+    border-radius: 4px;
+  }
+  .badge-linkedin { background: #0a66c2; color: #fff; }
+  .badge-x        { background: #111; color: #e8e8e8; border: 1px solid #333; }
+
+  .card-header .meta {
+    font-size: 0.72rem;
+    color: #444;
+  }
+
+  .post-text {
+    padding: 1.4rem 1.2rem 1rem;
+    white-space: pre-wrap;
+    font-size: 0.875rem;
+    line-height: 1.72;
+    color: #ccc;
+    tab-size: 2;
+  }
+  .post-text strong, .post-text b { color: #f0f0f0; }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1.2rem 1rem;
+  }
+
+  .char-count {
+    font-size: 0.68rem;
+    color: #383838;
+  }
+  .char-count.warn  { color: #f97316; }
+  .char-count.over  { color: #ef4444; }
+
+  .copy-btn {
+    background: #181818;
+    border: 1px solid #252525;
+    color: #666;
+    font-size: 0.72rem;
+    font-family: inherit;
+    padding: 0.4rem 0.9rem;
+    border-radius: 5px;
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .copy-btn:hover  { border-color: #3a3a3a; color: #aaa; background: #1c1c1c; }
+  .copy-btn.copied { border-color: #22c55e; color: #22c55e; background: #0a1a0e; }
+
+  /* fix list */
+  .fix-banner {
+    max-width: 740px;
+    margin: 0 auto 2rem;
+    background: #0d0d0d;
+    border: 1px solid #1a1a1a;
+    border-radius: 10px;
+    padding: 1.1rem 1.2rem;
+  }
+  .fix-banner h2 {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #444;
+    margin-bottom: 0.9rem;
+  }
+  .fix-list { list-style: none; display: flex; flex-direction: column; gap: 0.45rem; }
+  .fix-list li {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    font-size: 0.8rem;
+    color: #888;
+    line-height: 1.5;
+  }
+  .fix-list .tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0.14rem 0.38rem;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .tag-fixed    { background: #0a1f0e; color: #22c55e; }
+  .tag-new      { background: #0f1c2e; color: #38bdf8; }
+</style>
+</head>
+<body>
+
+<div class="page-title">Crucible — Launch Copy</div>
+<div class="page-sub">After fixing what was broken</div>
+
+<div class="fix-banner">
+  <h2>What was fixed before writing this</h2>
+  <ul class="fix-list">
+    <li>
+      <span class="tag tag-fixed">Fixed</span>
+      Removed all <code>random.uniform()</code> from recovery_time_ms — scores are now deterministic, derived from actual mutation parameters.
+    </li>
+    <li>
+      <span class="tag tag-fixed">Fixed</span>
+      Shadow agent feedback loop: winning perturbation configs are stored and exploited on subsequent runs (not just counting promotions).
+    </li>
+    <li>
+      <span class="tag tag-fixed">Fixed</span>
+      File locking (fcntl + atomic rename) on DarwinScorer and TraceMemory — concurrent runs no longer corrupt state.
+    </li>
+    <li>
+      <span class="tag tag-fixed">Fixed</span>
+      score_trend was backwards — "improving" fired when scores went down. Fixed to sort by created_at and compare correctly.
+    </li>
+    <li>
+      <span class="tag tag-fixed">Fixed</span>
+      attack_types_run detection was a fragile or-chain over mutation keys. Now stamped on AttackResult directly via attack_type field.
+    </li>
+    <li>
+      <span class="tag tag-new">New</span>
+      SupplyChainAgent: static audit for unpinned action SHA, pull_request_target abuse, script injection, missing permissions block.
+    </li>
+    <li>
+      <span class="tag tag-new">New</span>
+      supply_chain added to coverage_breadth denominator in scorer — pipelines that skip the audit now lose coverage score.
+    </li>
+  </ul>
+</div>
+
+<div class="posts">
+
+  <!-- LINKEDIN -->
+  <div class="card">
+    <div class="card-header">
+      <span class="platform-badge badge-linkedin">LinkedIn</span>
+      <span class="meta">Full post</span>
+    </div>
+    <div class="post-text" id="li">I built an engine that runs 6 adversarial agents against your CI/CD pipeline.
+
+Not a linter. Not a rules engine. Agents.
+
+They spawn, attack, score themselves on effectiveness, die when they underperform, and evolve between runs. Here's what I actually shipped and what it took to get there honest.
+
+──
+
+<b>What Crucible does:</b>
+
+Six attack agents run concurrently against your GitHub Actions or Playwright pipeline:
+
+• TimingAgent — injects delay profiles (race windows, cascade delays, timeout probes)
+• EnvCorruptionAgent — null injection, overflow, path traversal, SQL injection patterns on env vars
+• StepReorderAgent — shuffles execution order to expose hidden dependency assumptions
+• NetworkChaosAgent — packet loss, DNS flap, connection reset, latency spikes, partial responses
+• DependencyDriftAgent — yanked versions, unpinned packages, transitive conflicts, major bumps
+• SupplyChainAgent — static audit: unpinned action SHA, pull_request_target + checkout exploit, script injection via github.event, overpermissive GITHUB_TOKEN
+
+Each run produces a 0–100 resilience score broken into four components: survival rate, blast containment, recovery speed, attack surface coverage. Every failure is saved as a replayable trace. Same seed → same mutations → reproducible results.
+
+──
+
+<b>What I had to fix before I could ship this honestly:</b>
+
+The first version had a bug I almost shipped: the resilience score's "recovery speed" component (20% of the total score) was derived from random.uniform(). The score looked real. It wasn't. Scores are now computed from actual mutation parameters — delay magnitude, chaos profile, drift severity.
+
+Shadow agents had a "promotion" system that counted wins but never fed them back. When a shadow consistently outperformed production, it incremented a counter. The winning perturbation config was thrown away. That's fixed — winning configs are now stored and exploited on subsequent runs. The evolutionary feedback loop actually closes.
+
+DarwinScorer and TraceMemory wrote JSON files with no locking. Concurrent pipeline runs would silently corrupt state. Fixed with fcntl exclusive locks and atomic rename on every write.
+
+The score trend tracker had the comparison backwards. "Improving" fired when scores went down.
+
+──
+
+<b>What's still a model, not injection:</b>
+
+The attacks analyze your pipeline YAML and simulate failure conditions. They don't inject chaos into live runner processes. That distinction matters and I'll say it plainly:
+
+A "timing" failure today means: Crucible determined your step timeout is tighter than our delay profile. Not: we actually delayed your process and watched it die.
+
+That closes in v1: actual process-level fault injection against sandboxed runner execution.
+
+──
+
+<b>The supply chain piece is what I think matters most right now:</b>
+
+GitHub Actions is the biggest underaudited attack surface in modern engineering orgs.
+
+Unpinned actions (actions/checkout@v4 instead of a commit SHA) mean a compromised upstream repo silently becomes RCE in your pipeline. pull_request_target combined with a PR head checkout runs untrusted contributor code with write-scoped GITHUB_TOKEN. User-controlled github.event values interpolated into run: blocks are script injection. Missing permissions blocks leave GITHUB_TOKEN at default scope — broad write on most event types.
+
+These aren't theoretical. They're the pattern behind recent high-profile pipeline compromises. Crucible now checks all of them on every run.
+
+──
+
+Try it:
+
+pip install crucible-gym
+crucible attack .github/workflows/ci.yml
+
+If you run GitHub Actions at scale: the supply_chain check alone is worth running.
+
+#DevSecOps #PlatformSecurity #ChaosEngineering #GitHubActions #SupplyChain #OpenSource</div>
+    <div class="card-footer">
+      <span class="char-count" id="li-cc"></span>
+      <button class="copy-btn" onclick="copyText('li', this)">Copy</button>
+    </div>
+  </div>
+
+  <!-- TWITTER SINGLE -->
+  <div class="card">
+    <div class="card-header">
+      <span class="platform-badge badge-x">𝕏</span>
+      <span class="meta">Single tweet · punchy</span>
+    </div>
+    <div class="post-text" id="tw1">6 adversarial agents attack your CI/CD pipeline on every PR.
+
+Timing. Env corruption. Network chaos. Dependency drift. Step reordering. Supply chain audit.
+
+One agent died on the demo run. The timing agent found nothing and went extinct.
+
+pip install crucible-gym</div>
+    <div class="card-footer">
+      <span class="char-count" id="tw1-cc"></span>
+      <button class="copy-btn" onclick="copyText('tw1', this)">Copy</button>
+    </div>
+  </div>
+
+  <!-- TWITTER THREAD -->
+  <div class="card">
+    <div class="card-header">
+      <span class="platform-badge badge-x">𝕏 Thread</span>
+      <span class="meta">5 tweets</span>
+    </div>
+    <div class="post-text" id="tw2"><b>1/5</b>
+I built an adversarial CI/CD engine called Crucible.
+
+6 agents attack your pipeline concurrently on every PR. They score themselves, compete, and die when they stop finding vulnerabilities.
+
+One went extinct on the first demo run. 🧵
+
+<b>2/5</b>
+The agents:
+
+→ Timing: race windows, cascade delays, timeout probes
+→ Env: null injection, overflow, path traversal on env vars
+→ Network: packet loss, DNS flap, connection reset
+→ Dependency: yanked versions, unpinned packages
+→ Reorder: shuffles steps to expose hidden dependencies
+→ Supply chain: unpinned SHA, script injection, pull_request_target abuse
+
+<b>3/5</b>
+The supply chain agent is the one I'm most serious about.
+
+actions/checkout@v4 instead of a commit SHA = if that upstream repo is compromised, you have silent RCE in your pipeline.
+
+pull_request_target + PR head checkout = untrusted code runs with write GITHUB_TOKEN.
+
+${{ github.event.issue.title }} in a run: block = script injection.
+
+Crucible audits all three on every run.
+
+<b>4/5</b>
+Brutal thing I fixed before shipping:
+
+The resilience score's recovery_speed component (20% of the total) was derived from random.uniform().
+
+The score looked real. It wasn't. Fixed — now computed from actual mutation parameters.
+
+Shadow agents were "evolving" but the winning configs were thrown away. Fixed.
+
+<b>5/5</b>
+v0.1 is simulation — it analyzes your YAML, not injects into live runners.
+
+That's the honest limitation. v1 closes it.
+
+Try it on your own workflow:
+
+pip install crucible-gym
+crucible attack .github/workflows/ci.yml
+
+What breaks?</div>
+    <div class="card-footer">
+      <span class="char-count" id="tw2-cc"></span>
+      <button class="copy-btn" onclick="copyText('tw2', this)">Copy</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function getLength(id) {
+  const el = document.getElementById(id);
+  return el ? el.innerText.trim().replace(/\r\n/g, '\n').length : 0;
+}
+
+function updateCount(bodyId, counterId, limit) {
+  const n = getLength(bodyId);
+  const el = document.getElementById(counterId);
+  if (!el) return;
+  el.textContent = limit ? `${n} / ${limit}` : `${n} chars`;
+  el.className = 'char-count' + (limit && n > limit ? ' over' : limit && n > limit * 0.9 ? ' warn' : '');
+}
+
+function copyText(bodyId, btn) {
+  const el = document.getElementById(bodyId);
+  navigator.clipboard.writeText((el ? el.innerText : '').trim()).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+  });
+}
+
+updateCount('li',   'li-cc',   null);
+updateCount('tw1',  'tw1-cc',  280);
+updateCount('tw2',  'tw2-cc',  null);
+</script>
+</body>
+</html>

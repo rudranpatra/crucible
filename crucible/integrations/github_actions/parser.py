@@ -238,5 +238,19 @@ def create_demo_target() -> Dict:
         "has_retry_logic": False,
         "has_timeout": True,
         "critical_order_steps": ["checkout", "install_dependencies", "run_tests", "build_artifact", "deploy_staging"],
-        "downstream_steps": ["deploy_staging"]
+        "downstream_steps": ["deploy_staging"],
+        "supply_chain_risks": [
+            {
+                "finding_type": "unpinned_action",
+                "action": "actions/checkout@v4",
+                "step": "Checkout code",
+                "ref": "v4",
+                "severity": "high",
+            },
+            {
+                "finding_type": "missing_permissions_block",
+                "severity": "medium",
+                "detail": "No permissions block — GITHUB_TOKEN defaults grant contents:write on push events",
+            },
+        ],
     }

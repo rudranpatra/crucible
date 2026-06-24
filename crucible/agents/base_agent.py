@@ -25,6 +25,7 @@ class AttackResult:
     affected_steps: List[str]
     recovery_time_ms: Optional[float]
     raw_output: Optional[str] = None
+    attack_type: str = ""
 
 
 class BaseAdversarialAgent(ABC):
@@ -85,6 +86,7 @@ class BaseAdversarialAgent(ABC):
 
             try:
                 result = await self.apply_mutation(target, mutation)
+                result.attack_type = self.attack_type
                 event.status = AttackStatus.SUCCESS if result.failure_triggered else AttackStatus.FAILED
                 event.result = {
                     "failure_triggered": result.failure_triggered,

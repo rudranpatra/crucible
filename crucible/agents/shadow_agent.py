@@ -40,6 +40,8 @@ class ShadowAgent:
 
         self.production = agent_class(engine)
         self.shadow = agent_class(engine)
+        self._last_perturbation: Dict = {}
+        self.winning_perturbation_configs: List[Dict] = []
 
     # ── Core run ──────────────────────────────────────────────────────────────
 
@@ -63,8 +65,13 @@ class ShadowAgent:
             "production_trigger_rate": round(prod_rate, 4),
             "shadow_trigger_rate": round(shadow_rate, 4),
             "shadow_wins": shadow_wins,
+            "perturbation_applied": self._last_perturbation,
         }
         self.run_history.append(run_record)
+
+        if shadow_wins and self._last_perturbation:
+            self.winning_perturbation_configs.append(self._last_perturbation)
+            self.winning_perturbation_configs = self.winning_perturbation_configs[-5:]
 
         should_promote = self._should_promote()
         if should_promote:
@@ -102,22 +109,33 @@ class ShadowAgent:
 
     def _perturb_target(self, target: Dict) -> Dict:
         """
-        Slightly alter the shadow target's parameters so the shadow agent
-        explores a different region of the mutation space.
+        Perturb the shadow target. When we have winning perturbation configs, exploit
+        that direction (with small random variation) rather than exploring blindly.
+        This closes the evolutionary feedback loop: wins inform subsequent runs.
         """
-        p = self.perturbation
+        config: Dict = {}
 
         if "timeout_ms" in target and isinstance(target["timeout_ms"], (int, float)):
-            delta = random.uniform(-p, p)
+            if self.winning_perturbation_configs:
+                # Exploit: perturb in the direction that previously won, with small jitter
+                base_delta = self.winning_perturbation_configs[-1].get('timeout_delta', 0.0)
+                exploration = self.perturbation * 0.3
+                delta = base_delta + random.uniform(-exploration, exploration)
+            else:
+                delta = random.uniform(-self.perturbation, self.perturbation)
             target["timeout_ms"] = max(100, int(target["timeout_ms"] * (1 + delta)))
+            config['timeout_delta'] = round(delta, 4)
 
         if "steps" in target and isinstance(target["steps"], list):
             steps = target["steps"][:]
             random.shuffle(steps)
             target["steps"] = steps
 
-        target["has_retry_logic"] = not target.get("has_retry_logic", False)
+        new_retry = not target.get("has_retry_logic", False)
+        target["has_retry_logic"] = new_retry
+        config['has_retry_logic'] = new_retry
 
+        self._last_perturbation = config
         return target
 
     # ── Helpers ───────────────────────────────────────────────────────────────

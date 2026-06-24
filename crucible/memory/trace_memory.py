@@ -4,12 +4,29 @@ Stores, indexes, and retrieves adversarial traces.
 Traces are the core data asset — replayable, auditable, shareable.
 """
 
+import fcntl
 import json
 import time
 import uuid
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Optional, Any
 from pathlib import Path
+
+
+class _FileLock:
+    """Cross-process exclusive file lock using fcntl."""
+    def __init__(self, path: Path):
+        self._lock_path = path.with_suffix('.lock')
+        self._fh = None
+
+    def __enter__(self):
+        self._fh = open(self._lock_path, 'w')
+        fcntl.flock(self._fh, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *_):
+        fcntl.flock(self._fh, fcntl.LOCK_UN)
+        self._fh.close()
 
 
 @dataclass
@@ -121,7 +138,7 @@ class TraceMemory:
             score_history.append({
                 'trace_id': trace.trace_id,
                 'score': trace.resilience_score,
-                'created_at': trace.created_at
+                'created_at': trace.created_at,
             })
 
             for attack_type in trace.attack_types:
@@ -139,7 +156,12 @@ class TraceMemory:
         )[:5]
 
         avg_score = sum(t.resilience_score for t in all_traces) / len(all_traces)
-        score_trend = "improving" if len(score_history) > 1 and score_history[0]['score'] > score_history[-1]['score'] else "stable"
+        sorted_history = sorted(score_history, key=lambda x: x['created_at'])
+        score_trend = (
+            "improving" if len(sorted_history) > 1 and sorted_history[-1]['score'] > sorted_history[0]['score']
+            else "declining" if len(sorted_history) > 1 and sorted_history[-1]['score'] < sorted_history[0]['score']
+            else "stable"
+        )
 
         return {
             "total_traces": len(all_traces),
@@ -169,8 +191,11 @@ class TraceMemory:
 
     def _save_index(self):
         index_path = self.traces_dir / "index.json"
-        with open(index_path, 'w') as f:
-            json.dump(
-                {tid: asdict(t) for tid, t in self.index.items()},
-                f, indent=2
-            )
+        tmp = index_path.with_suffix('.tmp')
+        with _FileLock(index_path):
+            with open(tmp, 'w') as f:
+                json.dump(
+                    {tid: asdict(t) for tid, t in self.index.items()},
+                    f, indent=2
+                )
+            tmp.replace(index_path)
