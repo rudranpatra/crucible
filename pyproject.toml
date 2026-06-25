@@ -1,13 +1,13 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "crucible-gym"
-version = "0.1.0"
+version = "0.2.0"
 description = "Adversarial Intelligence Engine for CI/CD Pipelines"
-readme = "README.md"
-license = {text = "Apache-2.0"}
+readme = "crucible/README.md"
+license = "Apache-2.0"
 authors = [
   {name = "Rudra Patra", email = "rudran.patra@gmail.com"},
 ]
@@ -15,7 +15,7 @@ keywords = ["ci-cd", "adversarial", "testing", "devops", "chaos-engineering", "r
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
+
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",

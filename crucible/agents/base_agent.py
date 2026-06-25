@@ -10,7 +10,7 @@ import uuid
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from core.engine import AttackEvent, AttackStatus, ExecutionTrace, CrucibleEngine
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,38 @@ class BaseAdversarialAgent(ABC):
         self.config = config or {}
         self.agent_state = engine.spawn_agent(self.attack_type)
         self.agent_id = self.agent_state.agent_id
+
+    async def _run_command(
+        self,
+        cmd: str,
+        env: Optional[Dict[str, str]] = None,
+        cwd: Optional[str] = None,
+        timeout: float = 30.0,
+    ) -> Tuple[int, str, str]:
+        """
+        Execute a shell command. Returns (returncode, stdout, stderr).
+        returncode == -1 means timeout; -2 means failed to launch.
+        """
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+                cwd=cwd,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+                return proc.returncode, stdout.decode(errors='replace'), stderr.decode(errors='replace')
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+                return -1, "", f"process killed: exceeded {timeout}s timeout"
+        except Exception as exc:
+            return -2, "", str(exc)
 
     @abstractmethod
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:

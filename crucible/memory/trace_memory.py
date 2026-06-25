@@ -4,29 +4,13 @@ Stores, indexes, and retrieves adversarial traces.
 Traces are the core data asset — replayable, auditable, shareable.
 """
 
-import fcntl
 import json
 import time
 import uuid
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Optional, Any
 from pathlib import Path
-
-
-class _FileLock:
-    """Cross-process exclusive file lock using fcntl."""
-    def __init__(self, path: Path):
-        self._lock_path = path.with_suffix('.lock')
-        self._fh = None
-
-    def __enter__(self):
-        self._fh = open(self._lock_path, 'w')
-        fcntl.flock(self._fh, fcntl.LOCK_EX)
-        return self
-
-    def __exit__(self, *_):
-        fcntl.flock(self._fh, fcntl.LOCK_UN)
-        self._fh.close()
+from core.file_lock import FileLock as _FileLock
 
 
 @dataclass

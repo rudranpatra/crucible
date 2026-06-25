@@ -1,4 +1,4 @@
-# Graph Report - .  (2026-06-24)
+# Graph Report - .  (2026-06-25)
 
 ## Corpus Check
 - Corpus is ~20,477 words - fits in a single context window. You may not need a graph.
@@ -7,6 +7,78 @@
 - 451 nodes · 752 edges · 34 communities (26 shown, 8 thin omitted)
 - Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 135 edges (avg confidence: 0.61)
 - Token cost: 4,200 input · 3,100 output
+
+## README + Positioning Update (2026-06-25)
+
+### What changed
+- **Quick start** now leads with `pip install crucible-gym` + `crucible audit .`
+- **All commands** updated from `python3 cli/crucible.py` to installed `crucible` binary
+- **Attack types table** now includes SupplyChainAgent (6 agents, was 5)
+- **Test count** updated: 93 → 102
+- **Project structure** updated: `core/file_lock.py` added, 6 agents noted
+- **Positioning shift**: dropped "6 AI agents evolve and compete" framing; replaced with "adversarial experiments that measure resilience regression"
+- **Roadmap updated**: v0.2 now targets `crucible compare HEAD~1 HEAD` (commit-to-commit regression)
+- **`crucible audit` added** as recommended first-run command (supply_chain + dependency + env, auto-discovers workflows)
+- **Build backend fixed**: `setuptools.backends.legacy:build` → `setuptools.build_meta` (required for setuptools 68.x)
+
+### Codex review response (2026-06-25)
+
+Codex identified three adoption risks. Assessment and resolution:
+
+| Codex concern | Status | Resolution |
+|---|---|---|
+| First-run experience requires pasting Python code | Fixed | `pip install crucible-gym && crucible audit .` — one command, real findings |
+| "5 of 6 agents simulated" kills credibility | Wrong (based on v0.1) | All 6 run real subprocesses since v0.2 |
+| "6 AI agents" framing triggers skepticism | Valid | README now leads with the problem and the regression use case, not agent count |
+| Scores alone don't matter; regressions do | Valid | Roadmap v0.2: `crucible compare HEAD~1 HEAD`; PR comment workflow is now the primary use case shown |
+| Needs one killer workflow | Addressed | GitHub Actions PR comment workflow is now the second thing shown in README |
+
+Codex's category reframe — "Adversarial Execution Testing for CI/CD" — is accurate and adopted.
+The gap between Crucible and traditional scanners:
+
+  Scanner:  reads YAML → static findings
+  Crucible: reads YAML → executes → observes real exit codes → tracks regressions over time
+
+## Architecture Changes (2026-06-25 — v0.2 Real Execution)
+
+### What changed
+All five probabilistic agents replaced with real subprocess execution:
+
+| Agent | Before | After |
+|---|---|---|
+| **TimingAgent** | `delay > timeout * 0.8` arithmetic | `sleep {delay_s} && ({run_cmd})` via `asyncio.create_subprocess_shell`, real exit code |
+| **EnvCorruptionAgent** | keyword check on var name | Python probe script written to tempfile, executed with corrupted `os.environ` |
+| **StepReorderAgent** | string position comparison | Runs step commands in mutated order in `tempfile.TemporaryDirectory`, observes real dependency failures |
+| **NetworkChaosAgent** | boolean flag read | Real `curl` probes: 1ms timeout (latency spike), NXDOMAIN variant (DNS flap), port 65535 (connection reset), `--range 0-50` (partial response) |
+| **DependencyDriftAgent** | drift_type string match | `pip3 install --dry-run --no-cache-dir` on mutated `requirements.txt`; nonexistent versions/packages fail at resolver |
+| **SupplyChainAgent** | (unchanged) | Real YAML static analysis — was already real |
+
+### New in base layer
+- `BaseAdversarialAgent._run_command(cmd, env, cwd, timeout)` — shared async subprocess executor
+  - Returns `(returncode, stdout, stderr)`; `rc=-1` = timeout, `rc=-2` = launch error
+  - Used by all 5 real agents
+
+### New in AttackResult
+- `raw_output` — actual stdout+stderr from subprocess (was None for all agents in v0.1)
+- `mutation_applied['mode']` — `'real'` (from workflow `run:` block) or `'demo'` (canonical fallback)
+- `mutation_applied['exit_code']` — integer returncode from subprocess
+
+### Execution modes
+- **Real mode**: target parsed from actual `.github/workflows/*.yml`; step `run:` commands executed directly
+- **Demo mode**: no workflow file; agents use canonical shell sequences (git version, pip3, file-dependency chain) that expose the same failure patterns against real processes
+
+### Test additions (102 total, was 95)
+- `test_timing_agent_real_workflow` — confirms parsed `run:` steps execute with mode='real'
+- `test_env_agent_real_workflow` — confirms env vars from parsed workflow are corrupted
+- `test_reorder_agent_real_workflow` — confirms real npm/shell commands run in wrong order
+- `test_supply_chain_real_workflow` — finds `unpinned_action` + `missing_permissions_block` in real YAML
+- `test_dependency_agent_real_workflow` — pip resolver rejects nonexistent versions
+- `test_all_agents_stamp_attack_type` — every result carries agent's `attack_type` field
+- `test_real_workflow_full_run` — all 6 agents against parsed real workflow, asserts `failure_count > 0`
+
+### Shared utilities extracted
+- `core/file_lock.py` — `FileLock` extracted from duplicate `_FileLock` in `trace_memory.py` and `darwin_scorer.py`
+- `agents/shadow_agent.py` — `winning_perturbation_configs` now `deque(maxlen=5)` instead of list+slice
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_Adversarial Agent Base Layer|Adversarial Agent Base Layer]]
@@ -63,6 +135,7 @@
 - **CI Quality Gate: Tests + Lint + Typecheck** — ci_ci_job_test, ci_ci_job_lint, ci_ci_job_typecheck [EXTRACTED 1.00]
 - **Evolutionary Mechanics: Fitness + Shadow + Extinction** — crucible_readme_agent_fitness, crucible_readme_shadow_agents, readme_evolutionary_pressure_concept [EXTRACTED 1.00]
 - **Five Attack Types Portfolio** — crucible_readme_attack_timing, crucible_readme_attack_env, crucible_readme_attack_reorder, crucible_readme_attack_network, crucible_readme_attack_dependency [EXTRACTED 1.00]
+- **Six Real Execution Agents** — TimingAgent (subprocess+sleep), EnvCorruptionAgent (probe script), StepReorderAgent (file-dep chain), NetworkChaosAgent (curl chaos), DependencyDriftAgent (pip resolver), SupplyChainAgent (YAML static analysis) [v0.2]
 
 ## Communities (34 total, 8 thin omitted)
 

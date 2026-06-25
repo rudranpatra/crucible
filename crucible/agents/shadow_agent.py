@@ -8,6 +8,7 @@ for promotion — making this evolutionary, not just adversarial.
 import copy
 import random
 import time
+from collections import deque
 from typing import Dict, List, Type
 
 from agents.base_agent import BaseAdversarialAgent, AttackResult
@@ -41,7 +42,7 @@ class ShadowAgent:
         self.production = agent_class(engine)
         self.shadow = agent_class(engine)
         self._last_perturbation: Dict = {}
-        self.winning_perturbation_configs: List[Dict] = []
+        self.winning_perturbation_configs: deque = deque(maxlen=5)
 
     # ── Core run ──────────────────────────────────────────────────────────────
 
@@ -71,7 +72,6 @@ class ShadowAgent:
 
         if shadow_wins and self._last_perturbation:
             self.winning_perturbation_configs.append(self._last_perturbation)
-            self.winning_perturbation_configs = self.winning_perturbation_configs[-5:]
 
         should_promote = self._should_promote()
         if should_promote:

@@ -1,33 +1,174 @@
 # Crucible
 
-> Your CI/CD pipeline has failure modes it has never encountered.  
-> Crucible finds them before production does.
+> Run adversarial experiments against your CI/CD pipeline.  
+> Measure whether it gets more resilient or less resilient over time.
 
-Adversarial agents attack your workflows. The ones that find failures survive. The ones that don't, die.
-Every run produces a replayable trace. Every trace compounds into operational foresight.
-
-**This is not a testing framework. It is evolutionary pressure applied to your infrastructure.**
-
-[![Tests](https://img.shields.io/badge/tests-93%20passing-brightgreen)](crucible/tests/)
+[![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
+[![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](../LICENSE)
+
+Crucible executes controlled adversarial experiments against GitHub Actions workflows and Playwright test suites. It finds failure modes your pipeline has never encountered — before production does — and tracks whether each code change makes your pipeline stronger or weaker.
+
+**Not a scanner. Scanners ask: "Is this configured correctly?" Crucible asks: "What breaks when this is stressed?"**
 
 ---
 
-## What Crucible found
+## Install
 
-We ran adversarial attacks against the **official GitHub Actions Node.js CI starter workflow** — the template used by millions of repos.
+```bash
+pip install crucible-gym
+```
 
-Archived score: **75.9/100 (B)**. Four operational weaknesses found:
+```bash
+# First run — supply-chain and dependency audit against your repo
+crucible audit .
 
-| # | Finding | Attack | Blast radius |
-|---|---------|--------|--------------|
-| 1 | `DATABASE_URL=null` caused silent pipeline crash — tests pass, environment collapses | `env` | checkout → install → deploy |
-| 2 | `API_KEY` has no validation — null injection propagates past 3 steps before failing | `env` | all authenticated steps |
-| 3 | No retry logic on `git checkout` — a single connection reset kills the entire run | `network` | entire pipeline |
-| 4 | `node` runtime version unpinned — any major bump breaks the build silently | `dependency` | install → build → test |
+# All 6 agents against a specific workflow
+crucible attack --target .github/workflows/ci.yml
 
-Timing agent found nothing. **It went extinct.** Fitness collapsed to 2.5 after 5 mutations with zero triggers.
+# Demo — no workflow file needed
+crucible attack --demo --rich
+```
+
+---
+
+## What it found on our own repo
+
+```
+Auditing: .github/workflows/ci.yml
+------------------------------------------------------------
+Resilience: 30/100  [F] ❌
+
+Findings:
+  [HIGH]   Supply chain: unpinned_action — actions/checkout@v4, actions/setup-python@v4
+           not pinned to a commit SHA. Tag mutation = silent RCE in your pipeline.
+  [HIGH]   Dependency: 2 unpinned packages. Any yanked version breaks the build silently.
+  [MEDIUM] Env: GITHUB_TOKEN, PR_NUMBER lack input validation
+
+Trace: trc_a2e889a909  (replay: crucible replay --trace trc_a2e889a909)
+```
+
+Replay the exact run: `crucible replay --trace trc_a2e889a909`
+
+---
+
+## The workflow that makes it useful
+
+Add to `.github/workflows/crucible.yml`:
+
+```yaml
+on: pull_request
+
+jobs:
+  resilience:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install crucible-gym
+      - run: crucible attack --target .github/workflows/ci.yml --github-comment
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+```
+
+Every PR gets a comment showing the resilience score and any new vulnerabilities introduced. Engineers see the impact of their changes before merge.
+
+---
+
+## Six adversarial agents, real execution
+
+Every agent executes real subprocesses. No simulation, no arithmetic.
+
+| Agent | What it does | How it's real |
+|---|---|---|
+| **SupplyChainAgent** | Audits workflow YAML for unpinned actions, script injection, token scope | Parses actual YAML files, regex-matches `github.event.*` interpolations |
+| **TimingAgent** | Injects `sleep {delay}` before each step command | `sleep 2.0 && (npm test)` via `asyncio.create_subprocess_shell`, observes exit code |
+| **EnvCorruptionAgent** | Sets env vars to null, overflow, path traversal, type mismatch | Python probe script executed with corrupted `os.environ`, exit code = failure |
+| **StepReorderAgent** | Runs step commands in wrong order | Executes commands in mutated sequence in `tempfile.TemporaryDirectory`, file-dep failures are real |
+| **NetworkChaosAgent** | Tests network resilience under failure | Real `curl`: 1ms timeout (latency spike), NXDOMAIN (DNS flap), port 65535 (RST), `--range 0-50` (truncation) |
+| **DependencyDriftAgent** | Mutates dependency specs and resolves them | `pip3 install --dry-run` on mutated `requirements.txt` — nonexistent versions fail at resolver |
+
+All 6 run concurrently via `asyncio.gather`. Each run is deterministic via `--seed`.
+
+---
+
+## Resilience score
+
+Every run produces a **0–100 score** with four components:
+
+| Component | Weight | What it measures |
+|---|---|---|
+| Survival rate | 40% | % of attacks that did not trigger failures |
+| Blast containment | 25% | How contained failures were when they occurred |
+| Recovery speed | 20% | Estimated recovery time across all failures |
+| Coverage breadth | 15% | How many attack surfaces were tested |
+
+```
+A ≥ 90   Survived adversarial pressure across all attack types
+B ≥ 75   Minor vulnerabilities, low production risk
+C ≥ 60   Moderate vulnerabilities, targeted hardening recommended
+D ≥ 40   Significant vulnerabilities, high production risk
+F < 40   Will break under realistic operational pressure
+```
+
+Scores are marked **stale** after 30 days and require a re-run.
+
+---
+
+## Commands
+
+```bash
+# Audit (recommended first run)
+crucible audit .                                  # auto-discover workflows
+crucible audit .github/workflows/ci.yml           # specific file
+
+# Full attack
+crucible attack --target .github/workflows/ci.yml # all 6 agents
+crucible attack --target workflow.yml --attacks supply_chain,dependency
+crucible attack --demo                            # synthetic demo target
+crucible attack --demo --rich                     # rich terminal UI
+crucible attack --demo --shadow                   # evolutionary shadow agents
+crucible attack --target ci.yml --seed 42         # deterministic run
+crucible attack --target ci.yml --github-comment  # post score to GitHub PR
+crucible attack --target ci.yml --json            # full JSON output
+crucible attack --target ci.yml --quiet           # just score/100
+
+# Regression (the killer workflow)
+crucible compare HEAD~1 HEAD                      # did this change make CI weaker?
+crucible compare main feature-branch --target .github/workflows/ci.yml
+crucible trend                                    # score history across all stored runs
+
+# Traces
+crucible replay --trace trc_abc123                # replay stored trace
+crucible patterns                                 # failure patterns across all runs
+crucible status                                   # stored traces summary
+
+# Evolution
+crucible evolution                                # species fitness, extinction log
+
+# Badge
+crucible badge --score 73 --output badge.svg      # README badge
+crucible badge --target workflow.yml -o b.svg     # attack then badge
+
+# Web dashboard
+crucible serve                                    # http://127.0.0.1:7331
+pip install fastapi uvicorn                       # required for serve
+```
+
+---
+
+## Evolutionary mechanics
+
+### Agent fitness
+
+Every agent has a fitness score (0–100):
+- Agents that trigger failures **gain** fitness
+- Agents that find nothing **lose** fitness  
+- Below fitness 20 after 5+ attempts → **extinct**, logged to failure cemetery
+
+When the timing agent found nothing against the Node.js CI template:
 
 ```
 💀 AGENT OBITUARY
@@ -37,218 +178,46 @@ Timing agent found nothing. **It went extinct.** Fitness collapsed to 2.5 after 
    The pipeline survived every timing attack. This species line ends here.
 ```
 
-Replay this exact run:
-```bash
-crucible replay --trace trc_c003093279
-```
-
----
-
-## See it
-
-![Crucible demo — kill screen, agent obituary, report card](../demo.svg)
-
-> Generated from a real run against the GitHub Actions Node.js CI starter workflow.
-> Run `python3 cli/crucible.py attack --demo --rich` to see a fresh live run in your terminal. Demo scores vary because mutations are sampled.
-
-**To record your own GIF:**
-```bash
-pip install asciinema
-asciinema rec demo.cast -c "python3 cli/crucible.py attack --demo --rich"
-# Convert: agg demo.cast demo.gif  (https://github.com/asciinema/agg)
-```
-
----
-
-## Quick start
-
-```bash
-# 1. Clone and install
-git clone https://github.com/rudranpatra/crucible.git
-cd crucible/crucible
-pip install -r requirements.txt
-
-# 2. Run demo (no workflow file needed)
-python3 runner.py demo
-
-# 3. Attack a real workflow
-python3 cli/crucible.py attack --target .github/workflows/ci.yml --rich
-```
-
----
-
-## How it works
-
-```
-Your workflow  ──▶  Adversarial agents attack it  ──▶  Resilience score  ──▶  Replayable trace
-                              │
-              ┌───────────────┴──────────────────┐
-              │                                  │
-     Finds failures → survives              Finds nothing → fitness drops
-     fitness grows → evolves               5+ attempts → extinct
-              │                                  │
-              └───────────────┬──────────────────┘
-                              │
-                    Every trace compounds into
-                    operational foresight memory
-```
-
-Agents are **purely algorithmic** — no LLM, no external API, no cloud.
-The evolutionary pressure is the intelligence.
-
----
-
-## All commands
-
-```bash
-# Attack
-python3 cli/crucible.py attack --demo                       # demo target
-python3 cli/crucible.py attack --demo --rich                # rich terminal UI
-python3 cli/crucible.py attack --demo --shadow              # evolutionary shadow agents
-python3 cli/crucible.py attack --target workflow.yml        # real workflow
-python3 cli/crucible.py attack --demo --attacks timing,env  # specific types
-python3 cli/crucible.py attack --demo --seed 42             # deterministic — same seed → same score
-python3 cli/crucible.py attack --demo --github-comment      # post score to GitHub PR
-python3 cli/crucible.py attack --demo --quiet               # just score/100
-python3 cli/crucible.py attack --demo --json                # full JSON output
-
-# Traces
-python3 cli/crucible.py replay --trace trc_abc123           # replay a stored trace
-python3 cli/crucible.py patterns                            # failure patterns across runs
-python3 cli/crucible.py status                              # stored traces summary
-
-# Evolution
-python3 cli/crucible.py evolution                           # species fitness, extinction log
-
-# Badge
-python3 cli/crucible.py badge --score 73 --output badge.svg # README badge
-python3 cli/crucible.py badge --target workflow.yml -o b.svg # attack then badge
-
-# Web dashboard
-python3 cli/crucible.py serve                               # http://127.0.0.1:7331
-python3 cli/crucible.py serve --port 8080
-```
-
----
-
-## Attack types
-
-| Attack | What it targets | What failure looks like |
-|--------|----------------|------------------------|
-| `timing` | Delays, race conditions, timeout assumptions | Step exceeds timeout window → cascade failure |
-| `env` | Environment variable validation | `DATABASE_URL=null` → pipeline crash |
-| `reorder` | Hidden step dependency order | `deploy` runs before `build` → broken artifact |
-| `network` | Retry logic, timeout handling | No retry on 50% packet loss → silent failure |
-| `dependency` | Version pinning, lockfile coverage | Unpinned package yanked → build breaks |
-
----
-
-## Resilience score
-
-Every run produces a **0–100 score** with four weighted components:
-
-| Component | Weight | What it measures |
-|-----------|--------|-----------------|
-| Survival rate | 40% | % of attacks that did NOT trigger failures |
-| Blast containment | 25% | How contained failures were when they occurred |
-| Recovery speed | 20% | How fast the pipeline would recover |
-| Coverage breadth | 15% | How many attack surfaces were tested |
-
-```
-A  ≥ 90   Excellent — survived adversarial pressure across all attack types
-B  ≥ 75   Good — minor vulnerabilities, low production risk
-C  ≥ 60   Fair — moderate vulnerabilities, targeted hardening recommended
-D  ≥ 40   Poor — significant vulnerabilities, high production risk
-F  < 40   Critical — will break under realistic operational pressure
-```
-
-Scores are marked **stale** after 30 days and require a re-run.
-
----
-
-## Evolutionary mechanics
-
-### Agent fitness
-
-Every agent has a fitness score (0–100). After each run:
-- Agents that trigger failures **gain** fitness
-- Agents that find nothing **lose** fitness
-- Below fitness 20 after 5+ attempts → **extinct**, logged to failure cemetery
-
 ### Shadow agents (`--shadow`)
 
-Every production agent spawns a shadow running alternative mutations on a copy of the target. Shadow never touches the real target.
+Every production agent spawns a shadow running alternative mutations on a deep copy of the target. Shadow never touches the real target. Shadow trigger rate > production rate by 20% for 3+ consecutive runs → shadow is **promoted**. Promotion is logged as an evolutionary event.
 
 ```bash
-python3 cli/crucible.py attack --demo --shadow
-```
-
-Shadow trigger rate > production rate by 20% for 3+ consecutive runs → shadow is **promoted**. Promotion is logged as an evolutionary event.
-
-### Survival index (`evolution` command)
-
-Species fitness accumulates **across all runs** — not just the current one. Species that consistently find failures become dominant. Species that never do go extinct.
-
-```bash
-python3 cli/crucible.py evolution
-# Species fitness, dominant/extinct status, generation, lineage depth
+crucible attack --demo --shadow
+crucible evolution  # species fitness, promotions, extinction log
 ```
 
 ---
 
 ## Replayable traces
 
-Every run writes a `.crucible` file to `traces/`:
+Every run writes a `.crucible` trace:
 
 ```json
 {
-  "trace_id": "trc_c003093279",
-  "target": "Node.js CI",
-  "attack_types": ["timing", "env", "reorder", "network", "dependency"],
-  "resilience_score": 75.9,
+  "trace_id": "trc_a2e889a909",
+  "target": "CI",
+  "attack_types": ["timing", "env", "reorder", "network", "dependency", "supply_chain"],
+  "resilience_score": 30.0,
   "failure_points": [
-    "Env corruption: DATABASE_URL → path_traversal caused pipeline failure",
-    "Network chaos: connection_reset on git_checkout — no retry logic detected",
-    "Dependency failure: node — major_bump (unpinned package vulnerable)"
+    "Supply chain: actions/checkout@v4 uses ref 'v4' — not pinned to a commit SHA.",
+    "Env corruption: GITHUB_TOKEN → null_inject triggered validation failure (exit=1)",
+    "Dependency failure: requests [missing_package] — pip exit=1"
   ],
-  "blast_radius": ["step_using_api_key", "build", "git_checkout", "install"],
-  "replay_command": "crucible replay --trace traces/trc_c003093279.crucible"
+  "blast_radius": ["checkout", "workflow-level", "install", "build"],
+  "replay_command": "crucible replay --trace trc_a2e889a909"
 }
 ```
 
-Replay the exact attack sequence:
-
-```bash
-python3 cli/crucible.py replay --trace trc_c003093279
-```
-
-Traces are reproducible. Share them in postmortems. Use them to verify hardening.
+Traces are reproducible. Share them in postmortems. Use them to verify hardening worked.
 
 ---
 
 ## GitHub PR comment
 
-Post a resilience score on every pull request automatically — the Codecov play.
+Post a resilience score on every pull request — the Codecov play for pipeline resilience.
 
-### Step 1 — Add the workflow
-
-Copy `.github/workflows/crucible-template.yml` from this repo into your project's `.github/workflows/`.
-
-### Step 2 — Set environment variables
-
-| Variable | Source |
-|----------|--------|
-| `GITHUB_TOKEN` | Auto-available in Actions |
-| `GITHUB_REPOSITORY` | Auto-set in Actions (e.g. `org/repo`) |
-| `PR_NUMBER` | `${{ github.event.number }}` |
-
-### Step 3 — Run
-
-```bash
-python3 cli/crucible.py attack --target .github/workflows/ci.yml --github-comment
-```
-
-Every PR gets a comment:
+Copy [`.github/workflows/crucible-template.yml`](.github/workflows/crucible-template.yml) into your project. Every PR gets a comment:
 
 ```
 🔥 Crucible Resilience Report
@@ -256,42 +225,27 @@ Every PR gets a comment:
 🟡 73/100 (C) — Moderate risk
 
 Vulnerabilities detected:
-- ⚠️ DATABASE_URL, API_KEY lack input validation
-- ⚠️ git_checkout has no retry logic
+- ⚠️  actions/checkout@v4 not pinned to a commit SHA
+- ⚠️  DATABASE_URL, API_KEY lack input validation
+- ⚠️  git_checkout has no retry logic
 
 Blast radius: install, build, deploy
-Trace: trc_c003093279
+Trace: trc_a2e889a909
 
-crucible replay --trace trc_c003093279
-```
-
----
-
-## README badge
-
-```bash
-python3 cli/crucible.py badge --score 73 --output badge.svg
-```
-
-```markdown
-![Crucible Resilience](badge.svg)
+crucible replay --trace trc_a2e889a909
 ```
 
 ---
 
 ## Playwright integration
 
-Attack Playwright test suites directly — Crucible attacks the user flows themselves:
+Attack Playwright test suites directly:
 
 ```bash
-python3 cli/crucible.py attack --target tests/checkout.spec.ts
+crucible attack --target tests/checkout.spec.ts
 ```
 
-Extracted attack surfaces:
-- Page navigation sequences → `timing`, `reorder` attacks
-- Network fetch/XHR calls → `network` chaos
-- Environment variables → `env` corruption
-- Assertion checkpoints → blast radius mapping
+Extracted surfaces: page navigation sequences, network fetch/XHR calls, environment variables, assertion checkpoints.
 
 ---
 
@@ -299,7 +253,7 @@ Extracted attack surfaces:
 
 ```bash
 pip install fastapi uvicorn
-python3 cli/crucible.py serve
+crucible serve
 # Open http://127.0.0.1:7331
 ```
 
@@ -313,14 +267,15 @@ Live attack feed, score history, agent survival log, failure cemetery, vulnerabi
 crucible/
 ├── core/
 │   ├── engine.py           # Agent lifecycle, execution trace, event loop
+│   ├── file_lock.py        # Cross-process file lock (shared by trace_memory, darwin_scorer)
 │   └── shadow_runner.py    # Shadow/production agent pair management
 ├── agents/
-│   ├── base_agent.py       # Base adversarial agent (all agents inherit this)
-│   └── shadow_agent.py     # Shadow — runs alternative mutations on a copy
+│   ├── base_agent.py       # Base adversarial agent — _run_command, fitness, reflection
+│   └── shadow_agent.py     # Shadow — runs alternative mutations on a deep copy
 ├── attacks/
-│   └── strategies.py       # 5 attack agents: timing, env, reorder, network, dependency
+│   └── strategies.py       # 6 real-execution agents
 ├── scoring/
-│   ├── scorer.py           # Resilience scoring 0-100, grade, components
+│   ├── scorer.py           # Resilience scoring 0–100, grade, components
 │   └── darwin_scorer.py    # Survival index — lifetime fitness across runs
 ├── memory/
 │   └── trace_memory.py     # Persists .crucible traces, indexes, detects patterns
@@ -333,71 +288,74 @@ crucible/
 │       └── parser.py       # Parses Playwright test suites as attack targets
 ├── dashboard/
 │   ├── terminal.py         # Rich terminal UI: kill screens, obituaries, report card
-│   ├── server.py           # FastAPI web dashboard
-│   └── static/index.html   # Dashboard UI
-├── runner.py               # Orchestrates all layers (the only file that knows everything)
-├── cli/crucible.py         # CLI interface
-└── tests/                  # 93 passing tests
+│   └── server.py           # FastAPI web dashboard
+├── runner.py               # Orchestrates all layers (the only place that knows everything)
+├── cli/crucible.py         # CLI — audit, attack, replay, patterns, evolution, badge, serve
+└── tests/                  # 102 passing tests
 ```
 
----
-
-## Architecture principles
-
-1. **Every agent has a fitness score.** Agents below 20 after 5+ attempts die. The death mechanism is what makes this evolutionary, not just agentic.
-
-2. **Every run produces a replayable trace.** The trace is the core data artifact. Everything else — scoring, patterns, evolution — is derived from traces.
-
-3. **The runner is the only place that knows about all layers.** Engine, agents, scorer, memory don't import each other. Only `runner.py` orchestrates them.
-
-4. **Demo mode always works without any real pipeline.** `create_demo_target()` produces a realistic synthetic target. Tests use this.
-
-5. **No LLM in core logic.** Agents are algorithmic. The evolutionary pressure is the intelligence.
+**Architecture rule:** Engine, agents, scorer, memory don't import each other. Only `runner.py` orchestrates. Agents are purely algorithmic — no LLM, no external API, no cloud.
 
 ---
 
 ## Development
 
 ```bash
-# Clone and install
 git clone https://github.com/rudranpatra/crucible.git
-cd crucible/crucible
-pip install -r requirements.txt
+cd crucible-v0.1.0
+pip install -e ".[dev]"
 
 # Run all tests
-python3 -m pytest tests/ -v
-# 93 passed in ~8s
+python3 -m pytest crucible/tests/ -v
+# 102 passed
 
-# Run demo
-python3 runner.py demo
-
-# Run with rich UI
-python3 cli/crucible.py attack --demo --rich
+# Demo
+crucible attack --demo --rich
 ```
 
-Tests cover: engine, all 5 attack agents, resilience scorer, survival index scorer, shadow agent, shadow runner, terminal dashboard, GitHub commenter, SVG badge, Playwright parser, full end-to-end run.
+Tests cover: engine, all 6 attack agents (demo + real workflow mode), resilience scorer, survival index scorer, shadow agent, shadow runner, terminal dashboard, GitHub commenter, SVG badge, Playwright parser, full end-to-end run.
+
+---
+
+## Regression tracking
+
+The question that matters is not "what's the score today" — it's "did this change make the pipeline weaker?"
+
+```bash
+crucible compare HEAD~1 HEAD
+
+Resilience: 84 → 67  (↓17)
+Grade:      B → D
+
+⚠  Regression detected
+New vulnerabilities:
+  - Supply chain: actions/deploy@v2 not pinned to a commit SHA
+  - Dependency: requests pinned to 2.28.0 — known CVE in resolver path
+```
+
+```bash
+crucible trend
+
+Resilience Trend  (8 runs)
+--------------------------------------------------
+  2026-06-01    92/100 (A)  ██████████████████
+  2026-06-08    88/100 (B)  █████████████████
+  2026-06-15    76/100 (C)  ███████████████
+  2026-06-22    67/100 (D)  █████████████
+
+Overall: ↓25 pts  (declining)
+```
 
 ---
 
 ## Roadmap
 
-- **v0.1** ✅ — 5 attack types, resilience scoring, replayable traces, rich dashboard, shadow agents, survival index, GitHub PR comments, Playwright integration
-- **v0.2** — GitLab CI + Jenkins parsers, `crucible diff` to compare two traces
-- **v0.3** — Federated trace sharing: opt-in anonymized corpus, cross-deployment pattern fingerprinting
-- **v1.0** — Darwin Runtime: self-evolving attack strategies, full evolutionary agent infrastructure
-
----
-
-## Philosophy
-
-Everyone is building smarter AI.
-
-Almost nobody is building pressure-tested AI.
-
-Trust in autonomous systems will not come from capability claims.
-It will come from systems that have survived adversarial pressure and can prove it.
-
-Crucible is that pressure.
+| Version | Status | Focus |
+|---|---|---|
+| **v0.1** | ✅ | 6 real-execution agents, supply-chain audit, scoring, replayable traces, shadow agents, GitHub PR comments, Playwright integration |
+| **v0.2** | ✅ | `crucible compare HEAD~1 HEAD`, `crucible trend` — resilience regression and score history |
+| **v0.3** | Planned | GitHub Action (`uses: crucible/action@v1`), SARIF export for GitHub Security tab, GitLab CI parser |
+| **v1.0** | Planned | Sandboxed workflow execution inside real GitHub runners; blast-radius measurement |
 
 ---
 

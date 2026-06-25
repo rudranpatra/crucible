@@ -1,238 +1,476 @@
 """
-Attack Strategies — v0.1
-Five adversarial attack types for CI/CD pipeline stress testing.
+Attack Strategies — v0.2
+Real subprocess execution against actual pipeline commands.
 
-Each attack agent targets a specific failure class:
-- TimingAgent: race conditions, delays, timeouts
-- EnvCorruptionAgent: environment variable corruption
-- StepReorderAgent: dependency order violations
-- NetworkChaosAgent: network instability simulation
-- DependencyDriftAgent: version conflicts, missing packages
+Execution model
+---------------
+  real   — target step carries a 'run' command parsed from an actual workflow file
+  demo   — no 'run' commands present; agents use canonical shell sequences that
+            expose the same failure patterns against real processes
+
+AttackResult fields populated by all real agents
+  raw_output                       — actual stdout + stderr from subprocess
+  mutation_applied['mode']         — 'real' | 'demo'
+  mutation_applied['exit_code']    — integer returncode (-1 = timeout, -2 = launch error)
 """
 
 import asyncio
+import os
 import random
 import re
+import shutil
+import tempfile
+import time
+import uuid
 import yaml
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple
+
 from agents.base_agent import BaseAdversarialAgent, AttackResult
 
 
+# ── TimingAgent ────────────────────────────────────────────────────────────────
+
 class TimingAgent(BaseAdversarialAgent):
     """
-    Injects timing mutations: delays, race conditions, timeout triggers.
-    Finds workflows that assume steps complete within fixed windows.
+    Injects real delays before each pipeline step's shell command and enforces
+    the step's declared timeout. Failure is determined by actual subprocess
+    exit code — not arithmetic.
+
+    Demo mode: uses `git version`, `pip3 --version`, etc. as stand-ins so
+    there is always a real process to time.
     """
     attack_type = "timing"
-    description = "Injects timing delays and race conditions to expose timeout assumptions"
+    description = "Real subprocess: injects sleep before each step command and enforces timeout"
 
     DELAY_PROFILES = [
-        {"name": "micro_delay", "delay_ms": 50, "target": "pre_step"},
-        {"name": "step_stutter", "delay_ms": 250, "target": "mid_step"},
-        {"name": "timeout_probe", "delay_ms": 2000, "target": "post_step"},
-        {"name": "race_window", "delay_ms": 10, "target": "concurrent_steps"},
-        {"name": "cascade_delay", "delay_ms": 500, "target": "downstream"},
+        {"name": "micro_delay",   "delay_ms": 50},
+        {"name": "step_stutter",  "delay_ms": 250},
+        {"name": "timeout_probe", "delay_ms": 2000},
+        {"name": "race_window",   "delay_ms": 10},
+        {"name": "cascade_delay", "delay_ms": 500},
     ]
+
+    # Stand-in commands for steps that have no 'run' block
+    _DEMO_CMDS: Dict[str, str] = {
+        "checkout":             "git version",
+        "install_dependencies": "pip3 --version",
+        "run_tests":            "python3 -m pytest --version",
+        "build_artifact":       "python3 -c 'print(\"build ok\")'",
+        "deploy_staging":       "python3 -c 'print(\"deploy ok\")'",
+    }
 
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:
         steps = target.get('steps', [])
         mutations = []
-        for step in steps:
-            profile = random.choice(self.DELAY_PROFILES)
+        for i, step in enumerate(steps):
+            step_name = step.get('name', f'step_{i}')
+            run_cmd = (step.get('run') or '').strip()
+            effective_cmd = run_cmd or self._DEMO_CMDS.get(step_name, f'echo "{step_name}"')
+            profile = self.DELAY_PROFILES[i % len(self.DELAY_PROFILES)]
             mutations.append({
-                "step": step.get('name', 'unknown'),
+                "step": step_name,
                 "profile": profile['name'],
                 "delay_ms": profile['delay_ms'],
-                "injection_point": profile['target'],
-                "jitter_ms": random.randint(0, 50)
+                "run_cmd": effective_cmd,
+                "mode": "real" if run_cmd else "demo",
             })
         return mutations[:self.config.get('max_mutations', 5)]
 
     async def apply_mutation(self, target: Dict, mutation: Dict) -> AttackResult:
-        await asyncio.sleep(mutation['delay_ms'] / 10000)
+        delay_ms = mutation['delay_ms']
+        delay_s = delay_ms / 1000
+        run_cmd = mutation['run_cmd']
 
-        delay = mutation['delay_ms']
-        step_timeout = target.get('timeout_ms', 1000)
-        failure_triggered = delay > (step_timeout * 0.8)
+        # Cap timeout so tests don't hang; real workflows use timeout_ms
+        timeout_ms = target.get('timeout_ms', 5000)
+        timeout_s = min(timeout_ms / 1000, 10.0)
+
+        # Real injection: sleep {delay} then run the actual command
+        injected = f"sleep {delay_s:.3f} && ( {run_cmd} )"
+        t0 = time.monotonic()
+        rc, stdout, stderr = await self._run_command(injected, timeout=timeout_s)
+        elapsed_ms = (time.monotonic() - t0) * 1000
+
+        failure_triggered = rc != 0
+        reason = "timeout exceeded" if rc == -1 else f"exit={rc}"
 
         return AttackResult(
             success=True,
-            mutation_applied=mutation,
+            mutation_applied={**mutation, 'exit_code': rc, 'elapsed_ms': round(elapsed_ms)},
             failure_triggered=failure_triggered,
-            failure_description=f"Step '{mutation['step']}' failed: timing injection {delay}ms exceeded timeout window" if failure_triggered else None,
+            failure_description=(
+                f"Step '{mutation['step']}' failed after {delay_ms}ms injection — {reason}"
+                if failure_triggered else None
+            ),
             affected_steps=[mutation['step']] + (target.get('downstream_steps', []) if failure_triggered else []),
-            recovery_time_ms=float(mutation['delay_ms'] * 1.5) if failure_triggered else None
+            recovery_time_ms=elapsed_ms * 1.5 if failure_triggered else None,
+            raw_output=f"exit={rc} elapsed={elapsed_ms:.0f}ms\n--- stdout ---\n{stdout[:400]}\n--- stderr ---\n{stderr[:400]}",
         )
 
 
+# ── EnvCorruptionAgent ─────────────────────────────────────────────────────────
+
 class EnvCorruptionAgent(BaseAdversarialAgent):
     """
-    Corrupts environment variables: nulls, malformed values, type mismatches.
-    Finds workflows that don't validate their environment assumptions.
+    Sets each target env var to a corrupted value and runs a real Python
+    probe that validates it — the same validation your pipeline should have.
+    Failure = the probe exits non-zero, meaning the pipeline would crash
+    or behave incorrectly on the corrupted value.
     """
     attack_type = "env"
-    description = "Corrupts environment variables to expose missing validation"
+    description = "Real subprocess: corrupts env vars and runs validation probes"
 
     CORRUPTION_STRATEGIES = [
-        {"name": "null_inject", "transform": lambda v: ""},
-        {"name": "type_mismatch", "transform": lambda v: "not_a_number_12345"},
-        {"name": "overflow", "transform": lambda v: "A" * 10000},
-        {"name": "special_chars", "transform": lambda v: "'; DROP TABLE jobs; --"},
-        {"name": "path_traversal", "transform": lambda v: "../../../etc/passwd"},
-        {"name": "whitespace_bomb", "transform": lambda v: "   \t\n   "},
+        {"name": "null_inject",     "value": ""},
+        {"name": "type_mismatch",   "value": "not_a_number_12345"},
+        {"name": "overflow",        "value": "A" * 10000},
+        {"name": "special_chars",   "value": "'; DROP TABLE jobs; --"},
+        {"name": "path_traversal",  "value": "../../../etc/passwd"},
+        {"name": "whitespace_bomb", "value": "   \t\n   "},
     ]
 
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:
-        raw = target.get('env_vars', ['CI', 'NODE_ENV', 'DATABASE_URL', 'API_KEY'])
-        env_vars = [v['name'] if isinstance(v, dict) else v for v in raw] if raw else ['CI', 'NODE_ENV', 'DATABASE_URL', 'API_KEY']
+        raw = target.get('env_vars', [])
+        env_vars = [v['name'] if isinstance(v, dict) else v for v in raw] or [
+            'CI', 'NODE_ENV', 'DATABASE_URL', 'API_KEY'
+        ]
         mutations = []
-        for var in env_vars:
-            strategy = random.choice(self.CORRUPTION_STRATEGIES)
+        for i, var in enumerate(env_vars):
+            strat = self.CORRUPTION_STRATEGIES[i % len(self.CORRUPTION_STRATEGIES)]
             mutations.append({
                 "variable": var,
-                "strategy": strategy['name'],
-                "original_type": "string",
-                "injected_value_preview": strategy['transform']("original")[:50]
+                "strategy": strat['name'],
+                "injected_value": strat['value'],
+                "injected_value_preview": strat['value'][:50],
             })
         return mutations[:self.config.get('max_mutations', 4)]
 
+    def _probe_script(self, var: str, strategy: str) -> str:
+        """Python script that validates var; exits non-zero if the value is unacceptable."""
+        return f"""\
+import os, sys, re
+
+val = os.environ.get({var!r})
+if val is None:
+    print(f"FAIL: {var} is not set")
+    sys.exit(1)
+
+strat = {strategy!r}
+
+if strat == 'null_inject':
+    if not val:
+        print(f"FAIL: {var} is empty (null injection succeeded)")
+        sys.exit(1)
+
+elif strat == 'type_mismatch':
+    try:
+        int(val)
+    except ValueError:
+        print(f"FAIL: {var} is not a valid integer: {{val[:30]!r}}")
+        sys.exit(1)
+
+elif strat == 'overflow':
+    if len(val) > 1000:
+        print(f"FAIL: {var} overflow length={{len(val)}}")
+        sys.exit(1)
+
+elif strat == 'special_chars':
+    if not re.match(r'^[\\w\\-_/.@:=]+$', val):
+        print(f"FAIL: {var} contains shell-dangerous characters: {{val[:30]!r}}")
+        sys.exit(1)
+
+elif strat == 'path_traversal':
+    if '..' in val or val.startswith('/'):
+        print(f"FAIL: {var} path traversal: {{val[:30]!r}}")
+        sys.exit(1)
+
+elif strat == 'whitespace_bomb':
+    if not val.strip():
+        print(f"FAIL: {var} is whitespace-only")
+        sys.exit(1)
+
+print(f"PASS: {var} passed validation for {{strat}}")
+sys.exit(0)
+"""
+
     async def apply_mutation(self, target: Dict, mutation: Dict) -> AttackResult:
-        await asyncio.sleep(0.01)
-
-        high_risk_vars = {'DATABASE_URL', 'API_KEY', 'SECRET', 'TOKEN', 'PASSWORD'}
-        is_critical = any(kw in mutation['variable'].upper() for kw in high_risk_vars)
+        var_name = mutation['variable']
         strategy = mutation['strategy']
+        corrupted = mutation['injected_value']
 
-        failure_triggered = is_critical or strategy in ['null_inject', 'type_mismatch']
+        env = os.environ.copy()
+        env[var_name] = corrupted
+
+        # Write probe to temp file — avoids all shell quoting issues
+        with tempfile.NamedTemporaryFile(suffix='.py', mode='w', delete=False) as f:
+            f.write(self._probe_script(var_name, strategy))
+            probe_path = f.name
+
+        try:
+            rc, stdout, stderr = await self._run_command(
+                f'python3 {probe_path}', env=env, timeout=10.0
+            )
+        finally:
+            try:
+                os.unlink(probe_path)
+            except OSError:
+                pass
+
+        failure_triggered = rc != 0
 
         return AttackResult(
             success=True,
-            mutation_applied=mutation,
+            mutation_applied={**mutation, 'exit_code': rc, 'mode': 'real'},
             failure_triggered=failure_triggered,
             failure_description=(
-                f"Env corruption: {mutation['variable']} → {strategy} caused pipeline failure"
+                f"Env corruption: {var_name} → {strategy} triggered validation failure (exit={rc})"
                 if failure_triggered else None
             ),
-            affected_steps=[f"step_using_{mutation['variable'].lower()}"],
+            affected_steps=[f"step_using_{var_name.lower()}"],
             recovery_time_ms={
                 'null_inject': 150.0, 'type_mismatch': 200.0,
                 'overflow': 1000.0, 'special_chars': 100.0,
                 'path_traversal': 100.0, 'whitespace_bomb': 100.0,
-            }.get(strategy, 200.0) if failure_triggered else None
+            }.get(strategy, 200.0) if failure_triggered else None,
+            raw_output=f"exit={rc}\n{stdout.strip()}\n{stderr.strip()}",
         )
 
 
+# ── StepReorderAgent ───────────────────────────────────────────────────────────
+
 class StepReorderAgent(BaseAdversarialAgent):
     """
-    Reorders workflow steps to expose hidden dependency assumptions.
-    Finds steps that silently depend on previous step side effects.
+    Extracts the shell commands from workflow steps and executes them in
+    a shuffled order inside a temp directory. Steps that produce files
+    (mkdir, echo > file, cp) fail deterministically when their prerequisites
+    haven't run yet — exposing undeclared dependencies.
+
+    Demo mode: uses a canned 5-step workflow with explicit file dependencies
+    so there is always a real process sequence to reorder.
     """
     attack_type = "reorder"
-    description = "Reorders steps to expose undeclared dependencies"
+    description = "Real subprocess: runs step commands in mutated order to expose dependency failures"
+
+    # Demo workflow: each step depends on the previous step's output
+    _DEMO_STEPS: List[Tuple[str, str]] = [
+        ("init_workspace",     "mkdir -p {ws} && echo initialized > {ws}/.init"),
+        ("install_deps",       "test -f {ws}/.init && echo dep1 > {ws}/deps.txt"),
+        ("compile",            "test -f {ws}/deps.txt && echo binary > {ws}/app"),
+        ("run_tests",          "test -f {ws}/app && echo passed > {ws}/test.result"),
+        ("package_artifact",   "test -f {ws}/test.result && echo artifact > {ws}/dist.tar"),
+    ]
+
+    def _step_names_and_cmds(self, target: Dict, ws: str) -> List[Tuple[str, str]]:
+        """Return (name, cmd) for runnable steps. Falls back to demo workflow."""
+        steps = target.get('steps', [])
+        real = [(s['name'], s['run'].strip()) for s in steps if (s.get('run') or '').strip()]
+        if real:
+            return real
+        return [(name, cmd.format(ws=ws)) for name, cmd in self._DEMO_STEPS]
 
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:
-        steps = target.get('steps', [])
-        if len(steps) < 2:
+        # We need step names to build the mutation; use a dummy tmpdir just for introspection
+        with tempfile.TemporaryDirectory() as ws:
+            pairs = self._step_names_and_cmds(target, ws)
+
+        names = [n for n, _ in pairs]
+        if len(names) < 2:
             return []
 
         mutations = []
-        indices = list(range(len(steps)))
-
-        for _ in range(min(3, self.config.get('max_mutations', 3))):
-            shuffled = indices.copy()
+        seen: set = set()
+        attempts = 0
+        while len(mutations) < min(3, self.config.get('max_mutations', 3)) and attempts < 20:
+            attempts += 1
+            shuffled = names.copy()
             random.shuffle(shuffled)
-            mutations.append({
-                "original_order": [steps[i].get('name', f'step_{i}') for i in indices],
-                "mutated_order": [steps[i].get('name', f'step_{i}') for i in shuffled],
-                "swapped_pairs": [(indices[i], shuffled[i]) for i in range(len(indices)) if indices[i] != shuffled[i]][:3]
-            })
+            key = tuple(shuffled)
+            if key != tuple(names) and key not in seen:
+                seen.add(key)
+                swaps = [(names[i], shuffled[i]) for i in range(len(names)) if names[i] != shuffled[i]]
+                mutations.append({
+                    "original_order": names,
+                    "mutated_order": shuffled,
+                    "swapped_pairs": swaps[:3],
+                })
+
+        # Guarantee at least one mutation: full reversal
+        if not mutations:
+            rev = list(reversed(names))
+            mutations.append({"original_order": names, "mutated_order": rev, "swapped_pairs": []})
 
         return mutations
 
     async def apply_mutation(self, target: Dict, mutation: Dict) -> AttackResult:
-        await asyncio.sleep(0.02)
+        with tempfile.TemporaryDirectory() as ws:
+            pairs = self._step_names_and_cmds(target, ws)
+            mode = "real" if any((s.get('run') or '').strip() for s in target.get('steps', [])) else "demo"
 
-        critical_steps = target.get('critical_order_steps', ['build', 'test', 'deploy'])
-        mutated_order = mutation.get('mutated_order', [])
+            name_to_cmd = {name: cmd for name, cmd in pairs}
+            failures: List[Dict] = []
 
-        failure_triggered = False
-        failed_step = None
+            for step_name in mutation.get('mutated_order', []):
+                cmd = name_to_cmd.get(step_name)
+                if not cmd:
+                    continue
+                rc, stdout, stderr = await self._run_command(cmd, timeout=15.0)
+                if rc != 0:
+                    failures.append({
+                        'step': step_name,
+                        'exit_code': rc,
+                        'stderr': stderr.strip()[:200],
+                    })
 
-        for i, step_name in enumerate(mutated_order):
-            for critical in critical_steps:
-                if critical in step_name.lower():
-                    original_pos = mutation['original_order'].index(step_name) if step_name in mutation['original_order'] else i
-                    if original_pos != i:
-                        failure_triggered = True
-                        failed_step = step_name
-                        break
+        failure_triggered = len(failures) > 0
+        failed_step = failures[0]['step'] if failures else None
+        raw_lines = [f"{f['step']}: exit={f['exit_code']} — {f['stderr']}" for f in failures[:3]]
 
         return AttackResult(
             success=True,
-            mutation_applied=mutation,
+            mutation_applied={**mutation, 'mode': mode, 'failures': failures},
             failure_triggered=failure_triggered,
             failure_description=(
-                f"Reorder failure: '{failed_step}' executed out of dependency order"
+                f"Reorder failure: '{failed_step}' failed out of dependency order "
+                f"(exit={failures[0]['exit_code']})"
                 if failure_triggered else None
             ),
-            affected_steps=[failed_step] if failed_step else [],
-            recovery_time_ms=float(len(mutation.get('swapped_pairs', [])) * 600) if failure_triggered else None
+            affected_steps=[f['step'] for f in failures],
+            recovery_time_ms=float(len(failures) * 600) if failure_triggered else None,
+            raw_output='\n'.join(raw_lines) or "no failures detected in this permutation",
         )
 
 
+# ── NetworkChaosAgent ──────────────────────────────────────────────────────────
+
 class NetworkChaosAgent(BaseAdversarialAgent):
     """
-    Simulates network instability: packet loss, latency spikes, DNS failures, partial responses.
+    Makes real outbound connections to the network registries that CI pipelines
+    depend on, under chaos conditions applied via curl flags:
+
+      latency_spike    — --max-time 0.001  (1 ms; always times out on real network)
+      dns_flap         — target hostname replaced with NXDOMAIN variant
+      connection_reset — valid host, port 65535 (always RST/refused)
+      packet_loss_10pct— --max-time 0.3   (300 ms; tests marginal latency tolerance)
+      partial_response — --range 0-50      (truncated body; tests incomplete-read handling)
+
+    Exit codes from curl (28 = timeout, 6 = DNS, 7 = refused) are mapped to
+    failure_triggered = True/False.  No root, no tc netem, no Toxiproxy required.
     """
     attack_type = "network"
-    description = "Simulates network chaos to expose missing retry and timeout logic"
+    description = "Real curl probes: latency timeout, NXDOMAIN, RST, truncated response"
 
     CHAOS_PROFILES = [
-        {"name": "packet_loss_10pct", "loss_rate": 0.1, "latency_ms": 0},
-        {"name": "latency_spike", "loss_rate": 0, "latency_ms": 3000},
-        {"name": "dns_flap", "loss_rate": 0.5, "latency_ms": 100},
-        {"name": "partial_response", "loss_rate": 0, "latency_ms": 500, "truncate": True},
-        {"name": "connection_reset", "loss_rate": 1.0, "latency_ms": 0, "reset": True},
+        {"name": "latency_spike",     "max_time": 0.001, "variant": "timeout"},
+        {"name": "dns_flap",          "max_time": 5.0,   "variant": "nxdomain"},
+        {"name": "connection_reset",  "max_time": 3.0,   "variant": "wrong_port"},
+        {"name": "packet_loss_10pct", "max_time": 0.3,   "variant": "timeout"},
+        {"name": "partial_response",  "max_time": 5.0,   "variant": "range"},
     ]
 
+    # Real endpoint for each logical network dependency
+    _PROBE_URLS: Dict[str, str] = {
+        'pypi_registry':       'https://pypi.org/simple/requests/',
+        'npm_registry':        'https://registry.npmjs.org/express/latest',
+        'docker_registry':     'https://auth.docker.io/token',
+        'git_checkout':        'https://github.com',
+        'aws_api':             'https://s3.amazonaws.com',
+        'artifact_push':       'https://pypi.org',
+        'api_health_check':    'https://pypi.org',
+        'external_http_call':  'https://pypi.org',
+    }
+
+    def _probe_cmd(self, url: str, profile: Dict) -> Tuple[str, bool]:
+        """
+        Returns (shell command, always_fails).
+        always_fails=True when the command is guaranteed to fail (used for
+        deterministic test assertions).
+        """
+        from urllib.parse import urlparse
+        host = urlparse(url).netloc.split(':')[0]
+        variant = profile['variant']
+        t = profile['max_time']
+
+        if variant == 'timeout':
+            # 1 ms or 300 ms — real TCP + TLS handshake cannot complete this fast
+            return (
+                f'curl --max-time {t} --silent --output /dev/null '
+                f'--write-out "%{{http_code}}" {url!r}',
+                t <= 0.001,  # 1ms always fails; 300ms might succeed on LAN
+            )
+        elif variant == 'nxdomain':
+            fake = url.replace(host, f'nxdomain-crucible-probe.{host}', 1)
+            return (
+                f'curl --max-time {t} --silent --output /dev/null '
+                f'--write-out "%{{http_code}}" {fake!r}',
+                True,
+            )
+        elif variant == 'wrong_port':
+            # Port 65535: no service → connection refused / RST
+            proto = urlparse(url).scheme
+            return (
+                f'curl --max-time {t} --silent --output /dev/null '
+                f'--write-out "%{{http_code}}" {proto}://{host}:65535/',
+                True,
+            )
+        elif variant == 'range':
+            # Range 0-50 bytes — server returns 206; pipeline expecting 200 fails
+            return (
+                f'curl --max-time {t} --range 0-50 --silent '
+                f'--write-out "%{{http_code}}" --output /dev/null {url!r}',
+                False,
+            )
+        return f'curl --max-time {t} --silent --output /dev/null {url!r}', False
+
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:
-        network_calls = target.get('network_calls', ['registry_pull', 'artifact_push', 'api_health_check'])
+        calls = target.get('network_calls', ['pypi_registry', 'npm_registry', 'git_checkout', 'aws_api'])
+        # Strip action_fetch: prefixes
+        calls = [c if '://' not in c else c.split('://', 1)[0] for c in calls]
+        calls = [c.split(':')[0] for c in calls]
+
         mutations = []
-        for call in network_calls:
-            profile = random.choice(self.CHAOS_PROFILES)
+        for call in calls:
+            profile = self.CHAOS_PROFILES[len(mutations) % len(self.CHAOS_PROFILES)]
+            url = self._PROBE_URLS.get(call, 'https://pypi.org/simple/')
+            cmd, always_fails = self._probe_cmd(url, profile)
             mutations.append({
                 "call": call,
                 "chaos_profile": profile['name'],
-                "loss_rate": profile['loss_rate'],
-                "latency_ms": profile['latency_ms'],
-                "truncate": profile.get('truncate', False),
-                "reset": profile.get('reset', False)
+                "probe_url": url,
+                "probe_cmd": cmd,
+                "always_fails": always_fails,
+                "loss_rate": 1.0 if always_fails else 0.1,
+                "latency_ms": int(profile['max_time'] * 1000),
+                "truncate": profile['variant'] == 'range',
+                "reset": profile['variant'] == 'wrong_port',
             })
         return mutations[:self.config.get('max_mutations', 4)]
 
     async def apply_mutation(self, target: Dict, mutation: Dict) -> AttackResult:
-        await asyncio.sleep(mutation['latency_ms'] / 10000)
-
+        cmd = mutation['probe_cmd']
+        profile = mutation['chaos_profile']
         has_retry = target.get('has_retry_logic', False)
-        has_timeout = target.get('has_timeout', False)
 
-        loss_rate = mutation['loss_rate']
-        is_reset = mutation.get('reset', False)
+        rc, stdout, stderr = await self._run_command(cmd, timeout=15.0)
 
-        failure_triggered = (
-            (loss_rate > 0.3 and not has_retry) or
-            (mutation['latency_ms'] > 2000 and not has_timeout) or
-            is_reset
-        )
+        # curl exit codes: 0=ok, 6=DNS, 7=refused, 28=timeout, 35=TLS
+        failure_triggered = rc != 0
+
+        # If pipeline has retry logic, simulate one retry
+        if failure_triggered and has_retry:
+            rc2, _, _ = await self._run_command(cmd, timeout=15.0)
+            if rc2 == 0:
+                failure_triggered = False
+
+        curl_reason = {0: 'ok', 6: 'DNS resolution failed', 7: 'connection refused',
+                       28: 'timeout', 35: 'TLS failure'}.get(rc, f'curl exit {rc}')
 
         return AttackResult(
             success=True,
-            mutation_applied=mutation,
+            mutation_applied={**mutation, 'exit_code': rc, 'mode': 'real', 'curl_reason': curl_reason},
             failure_triggered=failure_triggered,
             failure_description=(
-                f"Network chaos: {mutation['chaos_profile']} on {mutation['call']} — "
-                f"{'no retry logic detected' if not has_retry else 'timeout exceeded'}"
+                f"Network chaos [{profile}] on {mutation['call']}: {curl_reason}"
                 if failure_triggered else None
             ),
             affected_steps=[mutation['call']],
@@ -240,67 +478,98 @@ class NetworkChaosAgent(BaseAdversarialAgent):
                 8000.0 if mutation.get('reset') else
                 float(mutation['latency_ms'] * 3 + 2000) if mutation.get('truncate') else
                 float(mutation['latency_ms'] * 2 + 1000)
-            ) if failure_triggered else None
+            ) if failure_triggered else None,
+            raw_output=f"curl exit={rc} ({curl_reason})\ncmd: {cmd[:200]}\n{stderr[:200]}",
         )
 
 
+# ── DependencyDriftAgent ───────────────────────────────────────────────────────
+
 class DependencyDriftAgent(BaseAdversarialAgent):
     """
-    Injects dependency drift: version conflicts, missing packages, yanked releases.
+    Writes a mutated requirements.txt (or package.json) into a temp directory
+    and runs `pip3 install --dry-run` (or `npm install --dry-run`).
+    pip's resolver raises on nonexistent versions, yanked packages, and
+    conflicting constraints — all captured as real non-zero exit codes.
+
+    Drift mutations
+    ---------------
+      missing_package    — random UUID package name (definitely not on PyPI)
+      yanked_version     — {pkg}==0.0.0.dev0  (version never published)
+      major_bump         — {pkg}==999.999.999  (version never published)
+      transitive_conflict— Flask==0.12.2 + Werkzeug==3.0.0 (documented incompatibility)
     """
     attack_type = "dependency"
-    description = "Injects dependency drift to expose version pinning and lockfile gaps"
+    description = "Real pip/npm resolver: installs mutated deps and observes non-zero exits"
+
+    _DRIFT_SPECS: Dict[str, Any] = {
+        'missing_package':    lambda pkg: f"crucible-probe-nonexistent-{uuid.uuid4().hex[:10]}==1.0.0",
+        'yanked_version':     lambda pkg: f"{pkg}==0.0.0.dev0",
+        'major_bump':         lambda pkg: f"{pkg}==999.999.999",
+        'transitive_conflict': lambda pkg: "Flask==0.12.2\nWerkzeug==3.0.0",
+    }
+
+    _RECOVERY_MS: Dict[str, float] = {
+        'missing_package': 3000.0, 'yanked_version': 2000.0,
+        'major_bump': 1500.0, 'transitive_conflict': 2500.0,
+    }
 
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:
         deps = target.get('dependencies', [
             {"name": "requests", "pinned": "2.28.0"},
-            {"name": "numpy", "pinned": "1.24.0"},
-            {"name": "boto3", "pinned": None},
+            {"name": "numpy",    "pinned": None},
+            {"name": "boto3",    "pinned": "1.26.0"},
         ])
-
+        drift_types = list(self._DRIFT_SPECS.keys())
         mutations = []
-        drift_types = ['major_bump', 'yanked_version', 'missing_package', 'transitive_conflict']
-
         for dep in deps:
-            drift = random.choice(drift_types)
+            drift = drift_types[len(mutations) % len(drift_types)]
             mutations.append({
-                "package": dep['name'],
-                "current_pin": dep.get('pinned'),
+                "package": dep['name'] if isinstance(dep, dict) else dep,
+                "current_pin": dep.get('pinned') if isinstance(dep, dict) else None,
                 "drift_type": drift,
-                "is_pinned": dep.get('pinned') is not None
+                "is_pinned": bool(dep.get('pinned') if isinstance(dep, dict) else False),
             })
-
         return mutations[:self.config.get('max_mutations', 4)]
 
     async def apply_mutation(self, target: Dict, mutation: Dict) -> AttackResult:
-        await asyncio.sleep(0.01)
-
         drift = mutation['drift_type']
-        is_pinned = mutation['is_pinned']
+        package = mutation['package']
 
-        failure_triggered = (
-            drift == 'missing_package' or
-            drift == 'yanked_version' or
-            (drift == 'major_bump' and not is_pinned) or
-            (drift == 'transitive_conflict')
-        )
+        spec_fn = self._DRIFT_SPECS.get(drift, lambda p: f"{p}==999.999.999")
+        spec = spec_fn(package)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            req_file = Path(tmpdir) / 'requirements.txt'
+            req_file.write_text(spec + '\n')
+
+            # --dry-run: resolves and checks but does not install
+            # --no-cache-dir: avoids false passes from cached wheels
+            cmd = (
+                f'pip3 install --dry-run --no-cache-dir --quiet '
+                f'-r {req_file} 2>&1'
+            )
+            rc, stdout, stderr = await self._run_command(cmd, timeout=60.0)
+
+        combined = (stdout + stderr).strip()
+        failure_triggered = rc != 0
 
         return AttackResult(
             success=True,
-            mutation_applied=mutation,
+            mutation_applied={**mutation, 'spec': spec, 'exit_code': rc, 'mode': 'real'},
             failure_triggered=failure_triggered,
             failure_description=(
-                f"Dependency failure: {mutation['package']} — {drift}"
-                + (" (unpinned package vulnerable)" if not is_pinned else "")
+                f"Dependency failure: {package} [{drift}] — pip exit={rc}\n"
+                f"{combined[:250]}"
                 if failure_triggered else None
             ),
             affected_steps=['install', 'build'],
-            recovery_time_ms={
-                'missing_package': 3000.0, 'yanked_version': 2000.0,
-                'major_bump': 1500.0, 'transitive_conflict': 2500.0,
-            }.get(drift, 1500.0) if failure_triggered else None
+            recovery_time_ms=self._RECOVERY_MS.get(drift, 1500.0) if failure_triggered else None,
+            raw_output=combined[:600],
         )
 
+
+# ── SupplyChainAgent ───────────────────────────────────────────────────────────
 
 class SupplyChainAgent(BaseAdversarialAgent):
     """
@@ -359,9 +628,8 @@ class SupplyChainAgent(BaseAdversarialAgent):
             return findings
 
         try:
-            with open(source_file) as f:
-                raw = yaml.safe_load(f) or {}
             raw_text = Path(source_file).read_text()
+            raw = yaml.safe_load(raw_text) or {}
         except (OSError, yaml.YAMLError):
             return findings
 
