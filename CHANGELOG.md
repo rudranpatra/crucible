@@ -5,6 +5,31 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.3.0] — 2026-06-25
+
+### Added
+- **GitLab CI parser** (`crucible/integrations/gitlab/parser.py`) — parses `.gitlab-ci.yml` files into the same target format as the GitHub Actions parser; all 6 agents work against GitLab pipelines unchanged
+  - Extracts jobs, scripts, global/job-level variables, dependency file references, network calls
+  - Detects supply chain risks: untagged/floating Docker images, missing global variables block
+  - `crucible audit .` now auto-discovers `.gitlab-ci.yml` alongside GitHub Actions workflows
+- **SARIF export** (`crucible/integrations/github/sarif.py`) — converts Crucible findings to SARIF 2.1.0 format for GitHub Code Scanning
+  - `crucible attack --sarif results.sarif` and `crucible audit --sarif results.sarif`
+  - Maps attack types to SARIF rule IDs (CRU001–CRU050), severity levels, and rule metadata
+  - Compatible with `github/codeql-action/upload-sarif` — findings appear in GitHub Security tab
+- **GitHub Action** (`action.yml`) — `uses: rudranpatra/crucible@v0.3.0`
+  - Inputs: `target`, `attacks`, `sarif-output`, `github-comment`, `fail-below` (quality gate)
+  - Outputs: `resilience-score`, `grade`, `trace-id`, `regression`
+  - Auto-uploads SARIF to GitHub Security tab via `codeql-action/upload-sarif`
+- `SupplyChainAgent` now handles `unpinned_image` finding type (from GitLab CI parser)
+- `runner.py` returns `failure_points` in result dict (was only stored in trace)
+- `runner.py` auto-detects `.gitlab-ci.yml` files in `_parse_target`
+- 21 new tests (124 total, was 103): GitLab parser (9), SARIF export (10), agent-GitLab compatibility (3), SupplyChainAgent `null` source_file guard (1)
+
+### Fixed
+- `SupplyChainAgent` crashed with `TypeError` when `source_file` is `None` (GitLab demo targets)
+
+---
+
 ## [0.2.0] — 2026-06-25
 
 ### Added

@@ -4,7 +4,7 @@
 > Measure whether it gets more resilient or less resilient over time.
 
 [![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
-[![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](../LICENSE)
 
@@ -335,13 +335,59 @@ crucible evolution  # species fitness, promotions, extinction log
 
 ---
 
+## GitHub Action
+
+```yaml
+# .github/workflows/crucible.yml
+on: pull_request
+jobs:
+  resilience:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rudranpatra/crucible@v0.3.0
+        with:
+          target: .github/workflows/ci.yml
+          github-comment: 'true'
+          sarif-output: crucible-results.sarif
+          fail-below: '60'          # fail PR if score drops below 60
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Findings appear in the GitHub Security tab via SARIF upload. The `fail-below` input quality-gates the PR.
+
+---
+
+## GitLab CI support
+
+```bash
+crucible audit .                        # auto-discovers .gitlab-ci.yml
+crucible attack --target .gitlab-ci.yml # all 6 agents against GitLab CI
+```
+
+GitLab CI targets are parsed into the same format as GitHub Actions — all 6 agents work unchanged. Supply chain checks include untagged Docker images and floating image refs.
+
+---
+
+## SARIF export
+
+```bash
+crucible attack --target ci.yml --sarif results.sarif
+crucible audit . --sarif findings.sarif
+```
+
+SARIF 2.1.0 output is compatible with `github/codeql-action/upload-sarif`. Findings appear in the GitHub Security tab alongside CodeQL, Dependabot, and secret scanning results.
+
+---
+
 ## Roadmap
 
 | Version | Status | Focus |
 |---|---|---|
 | **v0.1** | ✅ | 6 agents, supply-chain audit, scoring, replayable traces, shadow agents, GitHub PR comments, Playwright integration |
 | **v0.2** | ✅ | Real subprocess execution for all agents, `crucible compare HEAD~1 HEAD`, `crucible trend` |
-| **v0.3** | Planned | GitHub Action (`uses: crucible/action@v1`), SARIF export for GitHub Security tab, GitLab CI parser |
+| **v0.3** | ✅ | GitHub Action (`uses: rudranpatra/crucible@v0.3.0`), SARIF export, GitLab CI parser |
 | **v1.0** | Planned | Sandboxed workflow execution inside real GitHub runners; blast-radius measurement |
 
 ---

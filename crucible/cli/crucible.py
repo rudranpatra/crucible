@@ -52,6 +52,11 @@ def cmd_attack(args):
         seed=getattr(args, 'seed', None),
     ))
 
+    if getattr(args, 'sarif', None):
+        from integrations.github.sarif import write_sarif
+        count = write_sarif(result.get('failure_points', []), args.sarif, target_path=args.target)
+        print(f"SARIF: {count} finding(s) written to {args.sarif}")
+
     if args.json:
         out = {k: v for k, v in result.items() if k != 'shadow_summary'}
         print(json.dumps(out, indent=2))
@@ -177,11 +182,13 @@ def cmd_audit(args):
     from pathlib import Path
     import glob as _glob
 
-    # Expand '.' to workflow files
+    # Expand '.' to workflow files (GitHub Actions + GitLab CI)
     if target == '.' or Path(target).is_dir():
         patterns = [
             str(Path(target) / '.github' / 'workflows' / '*.yml'),
             str(Path(target) / '.github' / 'workflows' / '*.yaml'),
+            str(Path(target) / '.gitlab-ci.yml'),
+            str(Path(target) / '.gitlab-ci.yaml'),
         ]
         files = []
         for p in patterns:
@@ -192,6 +199,7 @@ def cmd_audit(args):
     else:
         files = [target]
 
+    result = None
     for wf_path in files:
         print(f"\nAuditing: {wf_path}")
         print("-" * 60)
@@ -217,7 +225,12 @@ def cmd_audit(args):
 
         print(f"\nTrace: {result['trace_id']}  (replay: crucible replay --trace {result['trace_id']})")
 
-    if args.json:
+        if getattr(args, 'sarif', None):
+            from integrations.github.sarif import write_sarif
+            count = write_sarif(result.get('failure_points', []), args.sarif, target_path=wf_path)
+            print(f"SARIF: {count} finding(s) written to {args.sarif}")
+
+    if args.json and result:
         print(json.dumps(result, indent=2))
 
 
@@ -423,13 +436,14 @@ examples:
     subparsers = parser.add_subparsers(dest='command')
 
     # audit
-    aup = subparsers.add_parser('audit', help='Supply-chain + dependency audit against a workflow (recommended first run)')
+    aup = subparsers.add_parser('audit', help='Supply-chain + dependency audit (GitHub Actions + GitLab CI)')
     aup.add_argument('target', nargs='?', default='.', help='Workflow file or repo root (default: .)')
+    aup.add_argument('--sarif', metavar='FILE', help='Write findings as SARIF (for GitHub Security tab)')
     aup.add_argument('--json', '-j', action='store_true')
 
     # attack
     ap = subparsers.add_parser('attack', help='Run adversarial attacks against a pipeline')
-    ap.add_argument('--target', '-t', help='Path to GitHub Actions workflow file')
+    ap.add_argument('--target', '-t', help='Path to workflow file (.yml, .gitlab-ci.yml, .spec.ts)')
     ap.add_argument('--demo', action='store_true', help='Run with synthetic demo target')
     ap.add_argument('--attacks', '-a', help=f'Comma-separated: {",".join(ALL_ATTACKS)}')
     ap.add_argument('--tags', help='Comma-separated tags for this run')
@@ -437,6 +451,7 @@ examples:
     ap.add_argument('--shadow', action='store_true', help='Enable shadow agent evolutionary tracking')
     ap.add_argument('--github-comment', action='store_true', dest='github_comment',
                     help='Post resilience score as GitHub PR comment')
+    ap.add_argument('--sarif', metavar='FILE', help='Write findings as SARIF (for GitHub Security tab)')
     ap.add_argument('--seed', type=int, help='Fixed random seed for deterministic replay')
     ap.add_argument('--quiet', '-q', action='store_true', help='Suppress output (just print score)')
     ap.add_argument('--json', '-j', action='store_true', help='Output full result as JSON')

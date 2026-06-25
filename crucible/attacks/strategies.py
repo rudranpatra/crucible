@@ -618,12 +618,16 @@ class SupplyChainAgent(BaseAdversarialAgent):
             "No permissions block. On push/workflow_dispatch GITHUB_TOKEN defaults include contents:write. "
             "Add 'permissions: read-all' at workflow level and scope up only where explicitly needed."
         ),
+        'unpinned_image': (
+            "Supply chain: Docker image {detail}. "
+            "A floating tag can be mutated upstream — pin to a digest for reproducible builds."
+        ),
     }
 
     async def generate_mutations(self, target: Dict) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = list(target.get('supply_chain_risks', []))
 
-        source_file = target.get('source_file', 'demo')
+        source_file = target.get('source_file') or 'demo'
         if source_file == 'demo' or not Path(source_file).exists():
             return findings
 
@@ -695,6 +699,7 @@ class SupplyChainAgent(BaseAdversarialAgent):
         failure = finding_type in {
             'unpinned_action', 'pull_request_target_checkout',
             'script_injection', 'overpermissive_token', 'missing_permissions_block',
+            'unpinned_image',
         }
 
         template = self._DESCRIPTIONS.get(finding_type, "Supply chain finding: {finding_type}")

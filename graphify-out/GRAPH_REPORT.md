@@ -8,6 +8,37 @@
 - Extraction: 82% EXTRACTED · 18% INFERRED · 0% AMBIGUOUS · INFERRED: 135 edges (avg confidence: 0.61)
 - Token cost: 4,200 input · 3,100 output
 
+## Architecture Changes (2026-06-25 — v0.3.0)
+
+### What changed
+
+| Component | Added |
+|---|---|
+| `crucible/integrations/gitlab/parser.py` | `GitLabCIParser` — parses `.gitlab-ci.yml` into the same target dict format as `GitHubActionsParser`; all 6 agents work unchanged |
+| `crucible/integrations/github/sarif.py` | `generate_sarif()`, `write_sarif()` — SARIF 2.1.0 export from `failure_points`; maps to CRU001–CRU050 rule IDs; GitHub Code Scanning compatible |
+| `action.yml` | Composite GitHub Action (`uses: rudranpatra/crucible@v0.3.0`); inputs: `target`, `attacks`, `sarif-output`, `github-comment`, `fail-below`; auto-uploads SARIF via `codeql-action/upload-sarif` |
+| CLI `--sarif FILE` | Added to `crucible attack` and `crucible audit`; writes SARIF after run |
+| `crucible audit .` | Now also discovers `.gitlab-ci.yml` files |
+| `runner.py` | Auto-detects GitLab CI by filename; `_parse_target` routes to `GitLabCIParser`; `failure_points` now included in returned result dict |
+| `SupplyChainAgent` | Handles `unpinned_image` finding type (from GitLab parser); guards against `source_file=None` |
+| Tests | 124 total (was 102): 9 GitLab parser tests, 10 SARIF tests, 3 agent-GitLab compatibility tests |
+
+### New nodes (key abstractions added)
+- `GitLabCIParser` — parallel to `GitHubActionsParser`, same output contract
+- `generate_sarif` / `write_sarif` — SARIF bridge to GitHub Security tab
+- `action.yml` — GitHub Action entry point; bridges `CrucibleRunner` to GitHub Actions marketplace
+
+### New edges (relationships)
+- `GitLabCIParser` --produces--> `attack target dict` --consumed_by--> all 6 agents (same as GHA parser)
+- `write_sarif` --reads--> `failure_points` --from--> `CrucibleRunner.run()`
+- `action.yml` --orchestrates--> `crucible attack` --uploads_via--> `codeql-action/upload-sarif`
+- `SupplyChainAgent` --now_handles--> `unpinned_image` finding type (GitLab-sourced)
+
+### Positioning impact
+- `crucible audit .` now scans both GitHub Actions and GitLab CI — single command for polyglot repos
+- SARIF closes the GitHub Security tab gap: Crucible findings appear alongside CodeQL, Dependabot, secret scanning
+- GitHub Action removes the "engineers don't install tools" adoption blocker — `uses: rudranpatra/crucible@v0.3.0` is one line
+
 ## README + Positioning Update (2026-06-25)
 
 ### What changed

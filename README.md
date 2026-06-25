@@ -4,7 +4,7 @@
 > Measure whether it gets more resilient or less resilient over time.
 
 [![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
-[![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen)](crucible/tests/)
+[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](crucible/tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
@@ -86,26 +86,27 @@ All agents execute real subprocesses, dependency resolution, command execution, 
 
 ---
 
-## GitHub PR comment workflow
-
-Add to `.github/workflows/crucible.yml`:
+## GitHub Action
 
 ```yaml
+# .github/workflows/crucible.yml
 on: pull_request
 jobs:
   resilience:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pip install crucible-gym
-      - run: crucible attack --target .github/workflows/ci.yml --github-comment
+      - uses: rudranpatra/crucible@v0.3.0
+        with:
+          target: .github/workflows/ci.yml
+          github-comment: 'true'
+          sarif-output: crucible-results.sarif
+          fail-below: '60'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.number }}
 ```
 
-Every PR gets a resilience score comment. Engineers see the impact before merge.
+Every PR gets a resilience score comment. Findings appear in the GitHub Security tab via SARIF. The `fail-below` input quality-gates the PR.
 
 ---
 

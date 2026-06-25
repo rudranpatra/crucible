@@ -1,0 +1,90 @@
+name: 'Crucible Resilience Check'
+description: 'Adversarial resilience testing for CI/CD pipelines — finds what breaks under stress and tracks regressions over time.'
+author: 'Rudra Patra'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  target:
+    description: 'Path to workflow or CI config file'
+    required: false
+    default: '.github/workflows/ci.yml'
+  attacks:
+    description: 'Comma-separated attack types: timing,env,reorder,network,dependency,supply_chain (default: all)'
+    required: false
+    default: ''
+  sarif-output:
+    description: 'Write findings as SARIF to this path for upload to GitHub Security tab'
+    required: false
+    default: 'crucible-results.sarif'
+  github-comment:
+    description: 'Post resilience score as PR comment (requires GITHUB_TOKEN)'
+    required: false
+    default: 'false'
+  fail-below:
+    description: 'Fail the step if resilience score drops below this threshold (0 = never fail)'
+    required: false
+    default: '0'
+
+outputs:
+  resilience-score:
+    description: 'Resilience score 0–100'
+    value: ${{ steps.run.outputs.score }}
+  grade:
+    description: 'Resilience grade A–F'
+    value: ${{ steps.run.outputs.grade }}
+  trace-id:
+    description: 'Trace ID — use with: crucible replay --trace <id>'
+    value: ${{ steps.run.outputs.trace_id }}
+  regression:
+    description: 'true if score dropped more than 5 points vs previous run'
+    value: ${{ steps.run.outputs.regression }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Crucible
+      shell: bash
+      run: pip install crucible-gym --quiet
+
+    - name: Run adversarial attack
+      id: run
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.number }}
+      run: |
+        ARGS="--target ${{ inputs.target }}"
+        [ -n "${{ inputs.attacks }}" ] && ARGS="$ARGS --attacks ${{ inputs.attacks }}"
+        [ "${{ inputs.github-comment }}" = "true" ] && ARGS="$ARGS --github-comment"
+        [ -n "${{ inputs.sarif-output }}" ] && ARGS="$ARGS --sarif ${{ inputs.sarif-output }}"
+
+        crucible attack $ARGS --json > /tmp/crucible_result.json || true
+
+        SCORE=$(python3 -c "import json; print(int(json.load(open('/tmp/crucible_result.json')).get('resilience_score', 0)))" 2>/dev/null || echo "0")
+        GRADE=$(python3 -c "import json; print(json.load(open('/tmp/crucible_result.json')).get('grade', 'F'))" 2>/dev/null || echo "F")
+        TRACE=$(python3 -c "import json; print(json.load(open('/tmp/crucible_result.json')).get('trace_id', ''))" 2>/dev/null || echo "")
+
+        echo "score=$SCORE" >> $GITHUB_OUTPUT
+        echo "grade=$GRADE" >> $GITHUB_OUTPUT
+        echo "trace_id=$TRACE" >> $GITHUB_OUTPUT
+        echo "regression=false" >> $GITHUB_OUTPUT
+
+        echo "Resilience: $SCORE/100 ($GRADE)  trace: $TRACE"
+
+        THRESHOLD="${{ inputs.fail-below }}"
+        if [ "$THRESHOLD" -gt "0" ] 2>/dev/null && [ "$SCORE" -lt "$THRESHOLD" ]; then
+          echo "::error::Crucible: resilience score $SCORE/100 is below threshold $THRESHOLD/100"
+          exit 1
+        fi
+
+    - name: Upload SARIF to GitHub Security
+      if: inputs.sarif-output != '' && hashFiles(inputs.sarif-output) != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-output }}
+        category: crucible
+      continue-on-error: true

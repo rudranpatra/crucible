@@ -19,6 +19,7 @@ from scoring.scorer import ResilienceScorer  # noqa: E402
 from scoring.darwin_scorer import DarwinScorer  # noqa: E402
 from memory.trace_memory import TraceMemory  # noqa: E402
 from integrations.github_actions.parser import GitHubActionsParser, create_demo_target  # noqa: E402
+from integrations.gitlab.parser import GitLabCIParser  # noqa: E402
 from integrations.playwright.parser import PlaywrightParser  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -282,6 +283,7 @@ class CrucibleRunner:
             "agent_reflections": agent_reflections,
             "shadow_summary": shadow_summary,
             "seed": seed,
+            "failure_points": failure_points,
         }
 
         # ── Output ────────────────────────────────────────────────────────────
@@ -349,6 +351,9 @@ class CrucibleRunner:
 
         if path.suffix.lower() in playwright_suffixes:
             return PlaywrightParser().parse_file(target_path)
+
+        if path.name.startswith('.gitlab-ci') or path.name == 'gitlab-ci.yml':
+            return GitLabCIParser().parse_file(target_path)
 
         return GitHubActionsParser().parse_file(target_path)
 
