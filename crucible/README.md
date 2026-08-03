@@ -468,7 +468,7 @@ SARIF 2.1.0 output is compatible with `github/codeql-action/upload-sarif`. Findi
 | **v0.1** | ✅ | 6 agents, supply-chain audit, scoring, replayable traces, shadow agents, GitHub PR comments, Playwright integration |
 | **v0.2** | ✅ | Real subprocess execution for all agents, `crucible compare HEAD~1 HEAD`, `crucible trend` |
 | **v0.3** | ✅ | GitHub Action (`uses: rudranpatra/crucible@v0.3.0`), SARIF export, GitLab CI parser |
-| **Phase A** | ✅ | `crucible validate` — Threat Dragon importer, threat schema, threat planner, threat → evidence mapping onto the existing 6 agents |
+| **v0.4** | ✅ | Phase A: `crucible validate` — Threat Dragon importer, threat schema, threat planner, threat → evidence mapping onto the existing 6 agents |
 | **v1.0** | Planned | Sandboxed workflow execution inside real GitHub runners; blast-radius measurement |
 
 ---
