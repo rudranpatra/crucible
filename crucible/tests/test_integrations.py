@@ -96,6 +96,41 @@ class TestGitHubCommenter:
         assert c.repo == "org/repo"
         assert c.pr_number == 99
 
+    def test_post_threat_report_not_configured_returns_false(self):
+        c = GitHubCommenter(token="", repo="", pr_number=0)
+        assert c.post_threat_report({"threats": []}) is False
+
+    def test_format_threat_comment_contains_marker_and_counts(self):
+        c = GitHubCommenter(token="tok", repo="org/repo", pr_number=1)
+        comment = c._format_threat_comment({
+            "trace_id": "trc_abc",
+            "replay_command": "crucible replay --trace trc_abc",
+            "coverage": 66.7,
+            "passed": 1,
+            "failed": 1,
+            "untested": 1,
+            "threats": [
+                {"title": "Unpinned action", "technique": "Tampering", "severity": "high",
+                 "status": "fail", "evidence": [
+                     {"failure_triggered": True, "description": "actions/checkout@v4 unpinned"},
+                 ]},
+                {"title": "Env validation", "technique": "Information Disclosure", "severity": "medium",
+                 "status": "pass", "evidence": []},
+                {"title": "No audit trail", "technique": "Repudiation", "severity": "low",
+                 "status": "untested", "evidence": []},
+            ],
+        })
+        assert GitHubCommenter.THREAT_MARKER in comment
+        assert "1 passed, 1 failed, 1 untested" in comment
+        assert "actions/checkout@v4 unpinned" in comment
+        assert "trc_abc" in comment
+
+    def test_find_existing_comment_uses_marker_param(self, monkeypatch):
+        c = GitHubCommenter(token="tok", repo="org/repo", pr_number=1)
+        monkeypatch.setattr(c, "_get", lambda url: [{"id": 7, "body": f"prefix {GitHubCommenter.THREAT_MARKER} suffix"}])
+        assert c._find_existing_comment(GitHubCommenter.THREAT_MARKER) == 7
+        assert c._find_existing_comment(GitHubCommenter.MARKER) is None
+
 
 # ── Badge generator ───────────────────────────────────────────────────────────
 

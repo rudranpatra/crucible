@@ -4,7 +4,7 @@
 > Measure whether it gets more resilient or less resilient over time.
 
 [![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
-[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](crucible/tests/)
+[![Tests](https://img.shields.io/badge/tests-159%20passing-brightgreen)](crucible/tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
@@ -21,6 +21,7 @@ Three questions every platform team asks:
 | Is my pipeline vulnerable? | `crucible audit .` |
 | What breaks under stress? | `crucible attack --target .github/workflows/ci.yml` |
 | Did this PR make things worse? | `crucible compare HEAD~1 HEAD` |
+| Are my threat model's threats actually exploitable? | `crucible validate threatmodel.json --target ci.yml` |
 
 ---
 
@@ -86,6 +87,30 @@ All agents execute real subprocesses, dependency resolution, command execution, 
 
 ---
 
+## Threat models backed by evidence
+
+`crucible validate` executes an [OWASP Threat Dragon](https://github.com/owasp/threat-dragon) threat model instead of just documenting it — every threat is mapped onto the 6 agents above and comes back `PASS`, `FAIL`, or `UNTESTED`, with a replayable trace as evidence.
+
+```bash
+crucible validate threatmodel.json --target .github/workflows/ci.yml
+```
+
+```
+Threat Validation Report — CI
+------------------------------------------------------------
+Coverage: 80%  (0 passed, 4 failed, 1 untested)
+
+  ❌ [critical] Unpinned Third-Party Actions Allow Supply Chain Tampering  (Tampering -> supply_chain)
+        ! Supply chain: actions/checkout@v4 uses ref 'v4' — not pinned to a commit SHA.
+  ⬜ [medium  ] Pipeline Actions Are Not Attributable to an Individual  (Repudiation -> none)
+
+Trace: trc_e8add5347b  (replay: crucible replay --trace traces/trc_e8add5347b.crucible)
+```
+
+`UNTESTED` means Crucible has no agent that can test that threat yet — it says so rather than silently marking it safe. See [crucible/README.md](crucible/README.md#threat-model-execution) for the importer/planner details and a worked example.
+
+---
+
 ## GitHub Action
 
 ```yaml
@@ -112,7 +137,7 @@ Every PR gets a resilience score comment. Findings appear in the GitHub Security
 
 ## Full documentation
 
-See [crucible/README.md](crucible/README.md) — all commands, scoring breakdown, evolutionary mechanics, replayable traces, web dashboard, and architecture.
+See [crucible/README.md](crucible/README.md) — all commands, scoring breakdown, threat model execution, evolutionary mechanics, replayable traces, web dashboard, and architecture.
 
 ---
 

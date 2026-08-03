@@ -36,6 +36,7 @@ class GitHubCommenter:
     """
 
     MARKER = "<!-- crucible-report -->"
+    THREAT_MARKER = "<!-- crucible-threat-report -->"
 
     def __init__(
         self,
@@ -68,15 +69,24 @@ class GitHubCommenter:
 
     def post_pr_comment(self, result: Dict) -> bool:
         """
-        Post (or update) a Crucible report comment on the PR.
+        Post (or update) a Crucible resilience report comment on the PR.
         Returns True on success.
         """
         if not self.is_configured():
             return False
+        return self._upsert_comment(self.MARKER, self._format_comment(result))
 
-        body = self._format_comment(result)
+    def post_threat_report(self, report: Dict) -> bool:
+        """
+        Post (or update) a Crucible threat validation report comment on the PR.
+        Returns True on success.
+        """
+        if not self.is_configured():
+            return False
+        return self._upsert_comment(self.THREAT_MARKER, self._format_threat_comment(report))
 
-        existing_id = self._find_existing_comment()
+    def _upsert_comment(self, marker: str, body: str) -> bool:
+        existing_id = self._find_existing_comment(marker)
         if existing_id:
             return self._update_comment(existing_id, body)
         return self._create_comment(body)
@@ -135,14 +145,66 @@ class GitHubCommenter:
         ]
         return "\n".join(lines)
 
+    def _format_threat_comment(self, report: Dict) -> str:
+        threats = report.get("threats", [])
+        coverage = report.get("coverage", 0.0)
+        passed = report.get("passed", 0)
+        failed = report.get("failed", 0)
+        untested = report.get("untested", 0)
+        trace_id = report.get("trace_id", "unknown")
+        replay = report.get("replay_command", "crucible replay --trace ...")
+
+        badge = "🔴" if failed else "🟢" if untested == 0 else "🟡"
+
+        lines = [
+            self.THREAT_MARKER,
+            "## 🛡️ Crucible Threat Validation Report",
+            "",
+            f"{badge} **{coverage:.0f}% covered** — {passed} passed, {failed} failed, {untested} untested",
+            "",
+            "| Threat | Technique | Severity | Status |",
+            "|---|---|---|---|",
+        ]
+
+        status_icon = {"pass": "✅", "fail": "❌", "untested": "⬜"}
+        for t in threats[:15]:
+            icon = status_icon.get(t.get("status"), "⬜")
+            lines.append(
+                f"| {t.get('title', 'untitled')} | {t.get('technique', '?')} | "
+                f"{t.get('severity', '?')} | {icon} {t.get('status', 'untested')} |"
+            )
+
+        if failed:
+            lines.append("")
+            lines.append("**Exploitable threats:**")
+            for t in threats:
+                if t.get("status") == "fail":
+                    for e in t.get("evidence", []):
+                        if e.get("failure_triggered") and e.get("description"):
+                            lines.append(f"- ⚠️ `{e['description']}`")
+
+        lines += [
+            "",
+            "**Replay this run:**",
+            "```bash",
+            replay,
+            "```",
+            "",
+            f"<sup>Trace `{trace_id}` · "
+            f"[Crucible](https://github.com/crucible-ci/crucible) "
+            f"— Threat models backed by evidence</sup>",
+        ]
+        return "\n".join(lines)
+
     # ── GitHub API calls ──────────────────────────────────────────────────────
 
-    def _find_existing_comment(self) -> Optional[int]:
+    def _find_existing_comment(self, marker: Optional[str] = None) -> Optional[int]:
+        marker = marker or self.MARKER
         url = f"{GITHUB_API}/repos/{self.repo}/issues/{self.pr_number}/comments"
         try:
             data = self._get(url)
             for comment in data:
-                if self.MARKER in comment.get("body", ""):
+                if marker in comment.get("body", ""):
                     return comment["id"]
         except urllib.error.HTTPError as exc:
             logger.warning("github_api_error op=list_comments status=%s", exc.code)

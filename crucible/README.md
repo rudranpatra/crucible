@@ -4,7 +4,7 @@
 > Measure whether it gets more resilient or less resilient over time.
 
 [![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
-[![Tests](https://img.shields.io/badge/tests-124%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-159%20passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](../LICENSE)
 
@@ -21,6 +21,7 @@ Three questions every platform team asks:
 | Is my pipeline vulnerable? | `crucible audit .` |
 | What breaks under stress? | `crucible attack --target .github/workflows/ci.yml` |
 | Did this PR make things worse? | `crucible compare HEAD~1 HEAD` |
+| Are my threat model's threats actually exploitable? | `crucible validate threatmodel.json --target ci.yml` |
 
 ---
 
@@ -136,6 +137,73 @@ All 6 run concurrently via `asyncio.gather`. Each run is deterministic via `--se
 
 ---
 
+## Threat model execution
+
+> Threat models backed by evidence.
+
+Traditional threat modeling stops at documentation: you draw a diagram, list STRIDE threats, write mitigations, and hope. `crucible validate` executes the threat model instead — every threat becomes a real security test run by the same 6 agents above, producing replayable evidence instead of a static line item.
+
+```bash
+crucible validate threatmodel.json --target .github/workflows/ci.yml
+```
+
+```
+Threat Validation Report — CI
+------------------------------------------------------------
+Coverage: 80%  (0 passed, 4 failed, 1 untested)
+
+  ❌ [critical] Unpinned Third-Party Actions Allow Supply Chain Tampering  (Tampering -> supply_chain)
+        ! Supply chain: actions/checkout@v4 uses ref 'v4' — not pinned to a commit SHA.
+  ❌ [high    ] Unvalidated Environment Variables Leak Secrets on Crash  (Information Disclosure -> env)
+        ! Env corruption: DATABASE_URL → type_mismatch triggered validation failure (exit=1)
+  ⬜ [medium  ] Pipeline Actions Are Not Attributable to an Individual  (Repudiation -> none)
+
+Trace: trc_e8add5347b  (replay: crucible replay --trace traces/trc_e8add5347b.crucible)
+```
+
+**Input:** exactly one importer — [OWASP Threat Dragon](https://github.com/owasp/threat-dragon) JSON exports. No Mermaid, no Draw.io, no Microsoft TMT. One input, by design.
+
+**Pipeline:**
+
+```
+Threat Dragon JSON
+        │
+        ▼
+Importer            — normalizes threats, skips ones already marked Mitigated/NotApplicable
+        │
+        ▼
+Planner              — maps each threat onto existing attack_type(s): keyword rules first,
+        │               then a STRIDE-category fallback (Spoofing→supply_chain, Tampering→
+        │               supply_chain+dependency, Information Disclosure→env, Denial of
+        │               Service→network+timing, Elevation of Privilege→supply_chain).
+        │               Repudiation has no fallback — none of the 6 agents produce
+        │               audit/logging evidence, so those threats are honestly UNTESTED
+        │               rather than force-fit onto an agent that can't test them.
+        ▼
+Existing 6 agents    — run once per attack_type needed (not once per threat), same
+        │               engine/trace/agent code `crucible attack` uses
+        ▼
+Evidence             — each threat gets PASS (ran, no failure), FAIL (ran, exploit
+        │               reproduced), or UNTESTED (no agent covers this threat)
+        ▼
+SARIF · GitHub PR comment · crucible replay
+```
+
+**Status semantics** — this is the part that matters: `PASS` means the mapped agents ran and found nothing, `FAIL` means they reproduced the threat as a real, replayable failure, and `UNTESTED` means Crucible is telling you it has no way to test that threat yet — not silently marking it safe.
+
+```bash
+crucible validate threatmodel.json --demo                          # try it against the synthetic demo target
+crucible validate threatmodel.json --target ci.yml --sarif out.sarif   # findings in the GitHub Security tab
+crucible validate threatmodel.json --target ci.yml --github-comment   # coverage table as a PR comment
+crucible validate threatmodel.json --target ci.yml --include-mitigated # re-validate previously mitigated threats too
+```
+
+A worked example lives at [`examples/threat-model.json`](examples/threat-model.json) — 6 threats across 5 STRIDE categories, one already marked `Mitigated` (excluded by default).
+
+Every `validate` run is a normal Crucible trace under the hood: it's stored via the same trace memory, replayable with `crucible replay`, and shows up in `crucible patterns`/`crucible trend` like any other run.
+
+---
+
 ## Resilience score
 
 Every run produces a **0–100 score** with four components:
@@ -197,6 +265,11 @@ pip install fastapi uvicorn                       # required for serve
 
 # Evolution
 crucible evolution                                # species fitness, extinction log
+
+# Threat model execution
+crucible validate threatmodel.json --target ci.yml            # execute a Threat Dragon model
+crucible validate threatmodel.json --demo                     # against the synthetic demo target
+crucible validate threatmodel.json --target ci.yml --sarif f.sarif --github-comment
 ```
 
 ---
@@ -262,6 +335,13 @@ crucible/
 │   └── shadow_agent.py     # Shadow — runs alternative mutations on a deep copy
 ├── attacks/
 │   └── strategies.py       # 6 agents: real subprocess, resolver, network, YAML analysis
+├── threats/
+│   ├── schema.py           # Normalized Threat / Evidence / ThreatValidationReport
+│   ├── importer.py         # Threat Dragon JSON -> normalized threats (one importer, by design)
+│   ├── planner.py          # Threat -> attack_plan[] (keyword rules, then STRIDE fallback)
+│   └── validator.py        # Runs the mapped agents, attributes evidence, PASS/FAIL/UNTESTED
+├── examples/
+│   └── threat-model.json   # Worked Threat Dragon example for `crucible validate`
 ├── scoring/
 │   ├── scorer.py           # Resilience scoring 0–100, grade, components
 │   └── darwin_scorer.py    # Survival index — lifetime fitness across runs
@@ -278,8 +358,8 @@ crucible/
 │   ├── terminal.py         # Rich terminal UI: kill screens, obituaries, report card
 │   └── server.py           # FastAPI web dashboard
 ├── runner.py               # Orchestrates all layers (the only place that knows everything)
-├── cli/crucible.py         # CLI — audit, attack, compare, trend, replay, badge, serve
-└── tests/                  # 102 passing tests
+├── cli/crucible.py         # CLI — audit, attack, compare, trend, replay, badge, serve, validate
+└── tests/                  # 159 passing tests
 ```
 
 **Architecture rule:** Engine, agents, scorer, memory don't import each other. Only `runner.py` orchestrates. Agents are purely algorithmic — no LLM, no external API, no cloud.
@@ -295,13 +375,13 @@ pip install -e ".[dev]"
 
 # Run all tests
 python3 -m pytest crucible/tests/ -v
-# 102 passed
+# 159 passed
 
 # Demo
 crucible attack --demo --rich
 ```
 
-Tests cover: engine, all 6 attack agents (demo + real workflow mode), resilience scorer, survival index scorer, shadow agent, shadow runner, terminal dashboard, GitHub commenter, SVG badge, Playwright parser, full end-to-end run.
+Tests cover: engine, all 6 attack agents (demo + real workflow mode), resilience scorer, survival index scorer, shadow agent, shadow runner, terminal dashboard, GitHub commenter, SVG badge, Playwright parser, threat schema/importer/planner/validator/CLI, full end-to-end run.
 
 ---
 
@@ -388,6 +468,7 @@ SARIF 2.1.0 output is compatible with `github/codeql-action/upload-sarif`. Findi
 | **v0.1** | ✅ | 6 agents, supply-chain audit, scoring, replayable traces, shadow agents, GitHub PR comments, Playwright integration |
 | **v0.2** | ✅ | Real subprocess execution for all agents, `crucible compare HEAD~1 HEAD`, `crucible trend` |
 | **v0.3** | ✅ | GitHub Action (`uses: rudranpatra/crucible@v0.3.0`), SARIF export, GitLab CI parser |
+| **Phase A** | ✅ | `crucible validate` — Threat Dragon importer, threat schema, threat planner, threat → evidence mapping onto the existing 6 agents |
 | **v1.0** | Planned | Sandboxed workflow execution inside real GitHub runners; blast-radius measurement |
 
 ---

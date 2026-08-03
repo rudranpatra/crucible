@@ -16,6 +16,7 @@ Usage:
   crucible badge --target workflow.yml --output badge.svg
   crucible serve
   crucible status
+  crucible validate threatmodel.json --target ci.yml --sarif findings.sarif
 """
 
 import asyncio
@@ -64,6 +65,79 @@ def cmd_attack(args):
         print(f"{result['resilience_score']:.0f}/100 ({result['grade']}) — {result['trace_id']}")
     elif not getattr(args, 'rich', False):
         print(f"Seed: {result['seed']}  (re-run: --seed {result['seed']})")
+
+
+# ── validate ──────────────────────────────────────────────────────────────────
+
+def cmd_validate(args):
+    """
+    Execute a threat model (Threat Dragon JSON) against a real target using
+    the existing 6 attack agents. Each threat becomes PASS / FAIL / UNTESTED
+    evidence instead of a static line item in a report.
+    """
+    from threats.importer import ThreatDragonImporter
+    from threats.planner import ThreatPlanner
+    from threats.validator import ThreatValidator
+    from integrations.github_actions.parser import create_demo_target
+
+    threats = ThreatDragonImporter().import_file(
+        args.threat_model, include_mitigated=getattr(args, 'include_mitigated', False)
+    )
+    if not threats:
+        print("No open threats found in threat model.", file=sys.stderr)
+        sys.exit(1)
+
+    threats = ThreatPlanner().plan_all(threats)
+
+    if args.demo or not args.target:
+        target = create_demo_target()
+    else:
+        target = CrucibleRunner(verbose=False)._parse_target(args.target)
+
+    validator = ThreatValidator()
+    report = asyncio.run(validator.validate(
+        threats, target,
+        seed=getattr(args, 'seed', None),
+        tags=args.tags.split(',') if args.tags else [],
+    ))
+
+    if getattr(args, 'sarif', None):
+        from integrations.github.sarif import write_sarif
+        count = write_sarif(report.failure_points(), args.sarif, target_path=args.target)
+        print(f"SARIF: {count} finding(s) written to {args.sarif}")
+
+    if getattr(args, 'github_comment', False):
+        from integrations.github.commenter import GitHubCommenter
+        commenter = GitHubCommenter()
+        if commenter.is_configured():
+            ok = commenter.post_threat_report(report.to_dict())
+            print("GitHub PR comment posted." if ok else "GitHub PR comment failed.")
+        else:
+            print("GitHub commenter not configured (set GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER).")
+
+    if args.json:
+        print(json.dumps(report.to_dict(), indent=2))
+        return
+
+    print(f"\nThreat Validation Report — {report.target}")
+    print("-" * 60)
+    print(
+        f"Coverage: {report.coverage:.0f}%  "
+        f"({report.passed} passed, {report.failed} failed, {report.untested} untested)"
+    )
+    print()
+
+    status_icon = {'pass': '✅', 'fail': '❌', 'untested': '⬜'}
+    for t in report.threats:
+        icon = status_icon[t.status.value]
+        plan = ', '.join(t.attack_plan) or 'none'
+        print(f"  {icon} [{t.severity:<8}] {t.title}  ({t.technique or 'unknown'} -> {plan})")
+        if t.status.value == 'fail':
+            for e in t.evidence:
+                if e.failure_triggered and e.description:
+                    print(f"        ! {e.description}")
+
+    print(f"\nTrace: {report.trace_id}  (replay: {report.replay_command})")
 
 
 # ── replay ────────────────────────────────────────────────────────────────────
@@ -431,6 +505,7 @@ examples:
   crucible replay --trace trc_abc123     # replay any stored trace
   crucible evolution                     # show species fitness over time
   crucible serve                         # start local web dashboard
+  crucible validate threatmodel.json --target ci.yml   # execute a threat model
         """,
     )
     subparsers = parser.add_subparsers(dest='command')
@@ -498,6 +573,20 @@ examples:
     # status
     subparsers.add_parser('status', help='Show Crucible status and stored trace summary')
 
+    # validate
+    vp = subparsers.add_parser('validate', help='Execute a threat model (Threat Dragon JSON) against a real target')
+    vp.add_argument('threat_model', help='Path to Threat Dragon JSON export')
+    vp.add_argument('--target', '-t', help='Path to workflow file to validate against')
+    vp.add_argument('--demo', action='store_true', help='Validate against synthetic demo target')
+    vp.add_argument('--include-mitigated', action='store_true', dest='include_mitigated',
+                     help='Also validate threats marked Mitigated/NotApplicable in the source model')
+    vp.add_argument('--tags', help='Comma-separated tags for this run')
+    vp.add_argument('--github-comment', action='store_true', dest='github_comment',
+                     help='Post threat coverage as a GitHub PR comment')
+    vp.add_argument('--sarif', metavar='FILE', help='Write FAIL findings as SARIF (for GitHub Security tab)')
+    vp.add_argument('--seed', type=int, help='Fixed random seed for deterministic replay')
+    vp.add_argument('--json', '-j', action='store_true')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -518,6 +607,7 @@ examples:
         'badge': cmd_badge,
         'serve': cmd_serve,
         'status': cmd_status,
+        'validate': cmd_validate,
     }
     dispatch[args.command](args)
 

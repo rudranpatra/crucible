@@ -1,0 +1,100 @@
+{
+  "version": "2.4.0",
+  "summary": {
+    "title": "CI/CD Pipeline Threat Model",
+    "owner": "platform-security",
+    "description": "STRIDE threat model for the demo build-and-deploy pipeline."
+  },
+  "detail": {
+    "contributors": [],
+    "diagrams": [
+      {
+        "title": "Build & Deploy Pipeline",
+        "diagramType": "STRIDE",
+        "cells": [
+          {
+            "shape": "process",
+            "data": {
+              "name": "CI Runner",
+              "type": "tm.Process",
+              "threats": [
+                {
+                  "id": "1",
+                  "title": "OAuth Token Replay Against Deploy Step",
+                  "type": "Spoofing",
+                  "severity": "High",
+                  "status": "Open",
+                  "description": "A captured deploy token could be replayed against the artifact registry to push an unauthorized build.",
+                  "mitigation": "Short-lived, single-use deploy tokens; network-level replay detection."
+                },
+                {
+                  "id": "2",
+                  "title": "Unpinned Third-Party Actions Allow Supply Chain Tampering",
+                  "type": "Tampering",
+                  "severity": "Critical",
+                  "status": "Open",
+                  "description": "Workflow steps reference third-party actions by tag, not commit SHA. A compromised upstream action runs with full pipeline privileges.",
+                  "mitigation": "Pin all actions to a commit SHA; enable Dependabot for action updates."
+                },
+                {
+                  "id": "3",
+                  "title": "Pipeline Actions Are Not Attributable to an Individual",
+                  "type": "Repudiation",
+                  "severity": "Medium",
+                  "status": "Open",
+                  "description": "Deploy actions triggered by the CI service account cannot be traced back to the engineer who merged the triggering PR.",
+                  "mitigation": "Correlate deploy logs with PR merge author in the audit trail."
+                }
+              ]
+            }
+          },
+          {
+            "shape": "store",
+            "data": {
+              "name": "Secrets Store",
+              "type": "tm.Store",
+              "threats": [
+                {
+                  "id": "4",
+                  "title": "Unvalidated Environment Variables Leak Secrets on Crash",
+                  "type": "Information Disclosure",
+                  "severity": "High",
+                  "status": "Open",
+                  "description": "Secrets injected as environment variables are not validated before use; a crash handler could dump the environment into logs.",
+                  "mitigation": "Validate and redact secret-bearing env vars before any logging path."
+                }
+              ]
+            }
+          },
+          {
+            "shape": "flow",
+            "data": {
+              "name": "Registry Pull",
+              "type": "tm.Flow",
+              "threats": [
+                {
+                  "id": "5",
+                  "title": "Dependency Registry Outage Causes Uncontrolled Build Failure",
+                  "type": "Denial of Service",
+                  "severity": "Medium",
+                  "status": "Open",
+                  "description": "The pipeline has no retry or timeout handling around package registry calls; a slow or unavailable registry hangs the build indefinitely.",
+                  "mitigation": "Add bounded retries with backoff and an explicit timeout around all registry calls."
+                },
+                {
+                  "id": "6",
+                  "title": "Historical Finding — Already Mitigated",
+                  "type": "Denial of Service",
+                  "severity": "Low",
+                  "status": "Mitigated",
+                  "description": "Previously the checkout step had no timeout. This is fixed and excluded from re-validation by default.",
+                  "mitigation": "timeout-minutes added to the checkout step."
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
