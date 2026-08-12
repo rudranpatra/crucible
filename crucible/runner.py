@@ -22,6 +22,11 @@ from integrations.github_actions.parser import GitHubActionsParser, create_demo_
 from integrations.gitlab.parser import GitLabCIParser  # noqa: E402
 from integrations.playwright.parser import PlaywrightParser  # noqa: E402
 
+try:
+    from crucible import __version__ as CRUCIBLE_VERSION
+except ImportError:
+    CRUCIBLE_VERSION = "unknown"
+
 logger = logging.getLogger(__name__)
 
 
@@ -271,6 +276,7 @@ class CrucibleRunner:
 
         result = {
             "trace_id": finalized.trace_id,
+            "crucible_version": CRUCIBLE_VERSION,
             "target": target['name'],
             "resilience_score": report.score,
             "grade": report.grade,
