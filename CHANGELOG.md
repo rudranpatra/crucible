@@ -5,10 +5,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
+## [0.4.1] — 2026-08-12
 
 ### Fixed
-- `crucible.__version__` was stuck at `0.1.0` while `pyproject.toml` had advanced to `0.4.0` — now in sync
+- `crucible.__version__` was stuck at `0.1.0` while `pyproject.toml` had advanced to `0.4.0` — the published `0.4.0` PyPI package carries this stale value, so it can't be corrected in place; this release supersedes it
 
 ### Added
 - `crucible_version` stamped on every `crucible attack` result dict / `--json` output — lets any downstream consumer (e.g. a regression-tracking service) tell an engine upgrade apart from an actual pipeline regression
