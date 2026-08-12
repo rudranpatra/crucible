@@ -9,7 +9,9 @@ import logging
 import os
 import urllib.request
 import urllib.error
-from typing import Dict, Optional
+from typing import Dict, List, Optional
+
+from integrations.github.sarif import _match_rule
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,18 @@ class GitHubCommenter:
             return False
         return self._upsert_comment(self.THREAT_MARKER, self._format_threat_comment(report))
 
+    def post_compare_comment(self, comparison: Dict) -> bool:
+        """
+        Post (or update) a before/after regression comment from `crucible
+        compare` — leads with whether this PR made the pipeline weaker,
+        not just the absolute score. Uses the same marker as post_pr_comment
+        so a PR gets one canonical Crucible comment regardless of which
+        command posted it.
+        """
+        if not self.is_configured():
+            return False
+        return self._upsert_comment(self.MARKER, self._format_compare_comment(comparison))
+
     def _upsert_comment(self, marker: str, body: str) -> bool:
         existing_id = self._find_existing_comment(marker)
         if existing_id:
@@ -140,7 +154,68 @@ class GitHubCommenter:
             "```",
             "",
             f"<sup>Trace `{trace_id}` · "
-            f"[Crucible](https://github.com/crucible-ci/crucible) "
+            f"[Crucible](https://github.com/rudranpatra/crucible) "
+            f"— Adversarial CI/CD Engine</sup>",
+        ]
+        return "\n".join(lines)
+
+    def _format_compare_comment(self, comparison: Dict) -> str:
+        s1, s2 = comparison["score_before"], comparison["score_after"]
+        grade1, grade2 = comparison["grade_before"], comparison["grade_after"]
+        delta = comparison["delta"]
+        added: List[str] = comparison.get("added", [])
+        fixed: List[str] = comparison.get("fixed", [])
+        trace_id = comparison.get("trace_id", "unknown")
+        replay = comparison.get("replay_command", "crucible replay --trace ...")
+
+        sign = f"+{delta:.0f}" if delta > 0 else f"{delta:.0f}"
+
+        if delta < -5:
+            n = len(added)
+            header = "🔥 Crucible — Security Regression Detected"
+            summary = f"{n} security check{'s' if n != 1 else ''} that previously passed now fail{'s' if n == 1 else ''}."
+        elif delta > 5:
+            n = len(fixed)
+            header = "✅ Crucible — Security Improved"
+            summary = f"{n} security check{'s' if n != 1 else ''} that previously failed {'is' if n == 1 else 'are'} now blocked."
+        else:
+            header = "🛡️ Crucible — Security Check Passed"
+            summary = "No security regressions detected."
+
+        lines = [
+            self.MARKER,
+            f"## {header}",
+            "",
+            f"**Score: {s1:.0f} → {s2:.0f} ({sign}) · {grade1} → {grade2}**",
+            "",
+            summary,
+            "",
+        ]
+
+        # Regressed and fixed checks are mutually exclusive by construction
+        # (delta can't be both < -5 and > 5), but only show whichever list
+        # is actually relevant to the direction the score moved.
+        if delta < -5 and added:
+            lines.append("**Regressed:**")
+            for fp in sorted(added)[:6]:
+                rule_id, rule_name, _, _ = _match_rule(fp)
+                lines.append(f"- `{rule_id}` {rule_name} — {fp}")
+            lines.append("")
+        elif delta > 5 and fixed:
+            lines.append("**Verified fixed:**")
+            for fp in sorted(fixed)[:6]:
+                rule_id, rule_name, _, _ = _match_rule(fp)
+                lines.append(f"- `{rule_id}` {rule_name} — {fp}")
+            lines.append("")
+
+        lines += [
+            "**Replay this run:**",
+            "```bash",
+            replay,
+            "```",
+            "",
+            f"<sup>Trace `{trace_id}` · "
+            f"[Crucible](https://github.com/rudranpatra/crucible) "
             f"— Adversarial CI/CD Engine</sup>",
         ]
         return "\n".join(lines)
@@ -191,7 +266,7 @@ class GitHubCommenter:
             "```",
             "",
             f"<sup>Trace `{trace_id}` · "
-            f"[Crucible](https://github.com/crucible-ci/crucible) "
+            f"[Crucible](https://github.com/rudranpatra/crucible) "
             f"— Threat models backed by evidence</sup>",
         ]
         return "\n".join(lines)

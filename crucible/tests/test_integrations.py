@@ -131,6 +131,51 @@ class TestGitHubCommenter:
         assert c._find_existing_comment(GitHubCommenter.THREAT_MARKER) == 7
         assert c._find_existing_comment(GitHubCommenter.MARKER) is None
 
+    def test_post_compare_comment_not_configured_returns_false(self):
+        c = GitHubCommenter(token="", repo="", pr_number=0)
+        assert c.post_compare_comment({
+            "score_before": 92.0, "score_after": 76.0, "grade_before": "A", "grade_after": "C",
+            "delta": -16.0, "added": [], "fixed": [], "trace_id": "t", "replay_command": "...",
+        }) is False
+
+    def test_format_compare_comment_regression(self):
+        c = GitHubCommenter(token="tok", repo="org/repo", pr_number=1)
+        comment = c._format_compare_comment({
+            "score_before": 92.0, "score_after": 76.0, "grade_before": "A", "grade_after": "C",
+            "delta": -16.0,
+            "added": ["Supply chain: actions/deploy@v2 not pinned to a commit SHA"],
+            "fixed": [],
+            "trace_id": "trc_after", "replay_command": "crucible replay --trace trc_after",
+        })
+        assert "Security Regression Detected" in comment
+        assert "92 → 76" in comment
+        assert "CRU001" in comment  # supply chain rule ID from sarif._match_rule
+        assert "trc_after" in comment
+        assert GitHubCommenter.MARKER in comment
+
+    def test_format_compare_comment_improvement(self):
+        c = GitHubCommenter(token="tok", repo="org/repo", pr_number=1)
+        comment = c._format_compare_comment({
+            "score_before": 76.0, "score_after": 92.0, "grade_before": "C", "grade_after": "A",
+            "delta": 16.0,
+            "added": [],
+            "fixed": ["Supply chain: actions/deploy@v2 not pinned to a commit SHA"],
+            "trace_id": "trc_after", "replay_command": "crucible replay --trace trc_after",
+        })
+        assert "Security Improved" in comment
+        assert "Verified fixed" in comment
+        assert "76 → 92" in comment
+
+    def test_format_compare_comment_no_significant_change(self):
+        c = GitHubCommenter(token="tok", repo="org/repo", pr_number=1)
+        comment = c._format_compare_comment({
+            "score_before": 90.0, "score_after": 88.0, "grade_before": "A", "grade_after": "A",
+            "delta": -2.0, "added": [], "fixed": [],
+            "trace_id": "trc_after", "replay_command": "...",
+        })
+        assert "Security Check Passed" in comment
+        assert "No security regressions detected" in comment
+
 
 # ── Badge generator ───────────────────────────────────────────────────────────
 

@@ -378,17 +378,17 @@ def cmd_compare(args):
 
     old_fps = set(r1.get('failure_points', []))
     new_fps = set(r2.get('failure_points', []))
+    added = new_fps - old_fps
+    fixed = old_fps - new_fps
 
     if delta < -5:
         print("\n⚠  Regression detected")
-        added = new_fps - old_fps
         if added:
             print("New vulnerabilities:")
             for fp in sorted(added):
                 print(f"  - {fp}")
     elif delta > 5:
         print("\n✓  Improvement detected")
-        fixed = old_fps - new_fps
         if fixed:
             print("Resolved:")
             for fp in sorted(fixed):
@@ -398,6 +398,21 @@ def cmd_compare(args):
 
     if args.json:
         print(json.dumps({ref1: r1, ref2: r2, 'delta': delta, 'regression': delta < -5}, indent=2))
+
+    if getattr(args, 'github_comment', False):
+        from integrations.github.commenter import GitHubCommenter
+        commenter = GitHubCommenter()
+        commenter.post_compare_comment({
+            'score_before': s1,
+            'score_after': s2,
+            'grade_before': r1['grade'],
+            'grade_after': r2['grade'],
+            'delta': delta,
+            'added': sorted(added),
+            'fixed': sorted(fixed),
+            'trace_id': r2.get('trace_id', 'unknown'),
+            'replay_command': r2.get('replay_command', 'crucible replay --trace ...'),
+        })
 
 
 # ── trend ──────────────────────────────────────────────────────────────────────
@@ -538,6 +553,8 @@ examples:
     cp.add_argument('--target', '-t', help='Workflow file path (default: .github/workflows/ci.yml)')
     cp.add_argument('--attacks', '-a', help=f'Comma-separated: {",".join(ALL_ATTACKS)}')
     cp.add_argument('--seed', type=int, help='Fixed seed for reproducible comparison')
+    cp.add_argument('--github-comment', action='store_true', dest='github_comment',
+                     help='Post regression result as a PR comment (requires GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER)')
     cp.add_argument('--json', '-j', action='store_true')
 
     # trend

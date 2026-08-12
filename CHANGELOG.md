@@ -5,6 +5,24 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- `crucible compare --github-comment` — posts a PR comment that leads with
+  whether the change made the pipeline *weaker*, not just the absolute
+  score: "🔥 Security Regression Detected" / "✅ Security Improved" / "🛡️
+  Security Check Passed", with specific `CRU0XX`-tagged checks that
+  regressed or were verified fixed
+- `GitHubCommenter.post_compare_comment()` — reuses the same comment marker
+  as `post_pr_comment()` so a PR gets one canonical Crucible comment
+  regardless of which command posted it
+
+### Fixed
+- Both PR comment footers linked to the wrong repo (`crucible-ci/crucible`
+  instead of `rudranpatra/crucible`)
+
+---
+
 ## [0.4.1] — 2026-08-12
 
 ### Fixed
