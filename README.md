@@ -7,6 +7,7 @@
 [![Tests](https://img.shields.io/badge/tests-159%20passing-brightgreen)](crucible/tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Crucible](badge.svg)](CHANGELOG.md) — Crucible attacking its own CI (`crucible badge --target .github/workflows/ci.yml`); regenerated periodically, not live per-commit yet
 
 Traditional scanners validate configuration. Crucible validates behavior under adversarial conditions. The two approaches are complementary.
 
