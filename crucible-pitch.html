@@ -1,0 +1,474 @@
+<title>Crucible — Adversarial CI/CD Testing</title>
+<style>
+  :root {
+    --void: #0a0c10;
+    --panel: #12151b;
+    --panel-2: #171b23;
+    --line: #232833;
+    --ink: #e8ebf1;
+    --ink-dim: #8b90a3;
+    --ink-faint: #565c6e;
+    --signal: #ff5a36;
+    --signal-dim: #7a3323;
+    --evidence: #33d17a;
+    --grade-a: #4ade80;
+    --grade-b: #a3e635;
+    --grade-c: #facc15;
+    --grade-d: #fb923c;
+    --grade-f: #f87171;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--void); }
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  a { color: var(--signal); }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  /* ── Nav ─────────────────────────────────────────────── */
+  .nav {
+    border-bottom: 1px solid var(--line);
+  }
+  .nav .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+  }
+  .wordmark {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+  }
+  .wordmark span { color: var(--signal); }
+  .nav-tag {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+  }
+
+  /* ── Hero ────────────────────────────────────────────── */
+  .hero { padding: 4.5rem 0 3.5rem; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 1.1rem;
+  }
+  .eyebrow::before { content: "$ "; color: var(--signal); }
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(2rem, 5.4vw, 3.05rem);
+    line-height: 1.12;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.3rem;
+    text-wrap: balance;
+    max-width: 15ch;
+  }
+  h1 .cursor {
+    display: inline-block;
+    width: 0.5em;
+    background: var(--signal);
+    animation: blink 1.05s steps(1) infinite;
+    margin-left: 0.06em;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .lede {
+    font-size: 1.14rem;
+    color: var(--ink-dim);
+    max-width: 46ch;
+    margin: 0 0 2.1rem;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .install {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    font-family: var(--mono);
+    font-size: 0.92rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0.7rem 1rem;
+    color: var(--ink);
+  }
+  .install .p { color: var(--ink-faint); }
+
+  /* ── Section shell ───────────────────────────────────── */
+  section.block { padding: 3.2rem 0; border-bottom: 1px solid var(--line); }
+  section.block:last-of-type { border-bottom: none; }
+  .label {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin: 0 0 0.6rem;
+  }
+  h2 {
+    font-family: var(--sans);
+    font-size: 1.55rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.5rem;
+    text-wrap: balance;
+  }
+  .section-sub {
+    color: var(--ink-dim);
+    max-width: 58ch;
+    margin: 0 0 2rem;
+  }
+
+  /* ── Pipeline ────────────────────────────────────────── */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    font-family: var(--mono);
+    font-size: 0.92rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .pipeline .step {
+    flex: 1 1 0;
+    min-width: 108px;
+    padding: 1rem 0.9rem;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    position: relative;
+  }
+  .pipeline .step:last-child { border-right: none; background: var(--panel-2); }
+  .pipeline .step .n { color: var(--ink-faint); font-size: 0.76rem; }
+  .pipeline .step .name { color: var(--ink); font-weight: 600; margin-top: 0.15rem; }
+  .pipeline .step:last-child .name { color: var(--evidence); }
+
+  /* ── Terminal panel (real evidence example) ─────────── */
+  .term {
+    font-family: var(--mono);
+    font-size: 0.86rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .term-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-faint);
+  }
+  .term-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .term-body { padding: 1rem 1.1rem 1.15rem; white-space: pre-wrap; color: var(--ink-dim); }
+  .term-body .score-f { color: var(--grade-f); font-weight: 700; }
+  .term-body .tag-high { color: var(--signal); font-weight: 600; }
+  .term-body .tag-med { color: var(--grade-c); font-weight: 600; }
+  .term-body .line { color: var(--ink); }
+  .term-body .trace { color: var(--ink-faint); }
+
+  /* ── Trend bars (real numbers) ───────────────────────── */
+  .trend { font-family: var(--mono); font-size: 0.85rem; }
+  .trend-row { display: flex; align-items: center; gap: 0.8rem; margin-bottom: 0.5rem; }
+  .trend-row .date { width: 6.2rem; color: var(--ink-faint); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .trend-row .bar-track { flex: 1; background: var(--line); border-radius: 3px; height: 9px; overflow: hidden; }
+  .trend-row .bar-fill { height: 100%; border-radius: 3px; }
+  .trend-row .val { width: 4.2rem; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+  .trend-note { color: var(--ink-dim); margin-top: 0.9rem; font-size: 0.92rem; font-family: var(--sans); }
+  .trend-note .down { color: var(--grade-f); font-weight: 600; }
+
+  /* ── Agents grid ─────────────────────────────────────── */
+  .agents {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .agent {
+    background: var(--panel);
+    padding: 1rem 1.1rem;
+  }
+  .agent .name { font-family: var(--mono); font-size: 0.86rem; color: var(--evidence); margin-bottom: 0.3rem; }
+  .agent .desc { font-size: 0.88rem; color: var(--ink-dim); }
+
+  /* ── Pricing ─────────────────────────────────────────── */
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .tier {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 1.4rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .tier.featured { border-color: var(--signal-dim); background: var(--panel-2); }
+  .tier .tname { font-weight: 700; font-size: 1.02rem; margin-bottom: 0.2rem; }
+  .tier .tprice {
+    font-family: var(--mono);
+    color: var(--ink-dim);
+    font-size: 0.88rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .tier .tprice .ph { color: var(--ink-faint); }
+  .tier ul { list-style: none; margin: 0; padding: 0; font-size: 0.87rem; color: var(--ink-dim); }
+  .tier li { padding: 0.28rem 0; padding-left: 1.1rem; position: relative; }
+  .tier li::before { content: "›"; position: absolute; left: 0; color: var(--signal); font-family: var(--mono); }
+
+  /* ── Footer / CTA ────────────────────────────────────── */
+  .cta {
+    padding: 3.5rem 0 4rem;
+    text-align: left;
+  }
+  .cta h2 { font-size: 1.9rem; max-width: 20ch; }
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.1rem;
+    margin-top: 1.5rem;
+  }
+  .btn {
+    font-family: var(--mono);
+    font-size: 0.92rem;
+    font-weight: 600;
+    background: var(--signal);
+    color: #1a0800;
+    border: none;
+    border-radius: 5px;
+    padding: 0.78rem 1.3rem;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn:focus-visible, a:focus-visible, .install:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+  }
+  .cta-note { font-size: 0.86rem; color: var(--ink-faint); }
+  .footer-fine {
+    font-size: 0.82rem;
+    color: var(--ink-faint);
+    padding: 1.6rem 0 2.5rem;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  @media (max-width: 620px) {
+    .agents { grid-template-columns: 1fr; }
+    .tiers { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .pipeline .step { border-right: none; border-bottom: 1px solid var(--line); }
+    .pipeline .step:last-child { border-bottom: none; }
+  }
+</style>
+
+<div class="nav">
+  <div class="wrap">
+    <div class="wordmark">CRUCIBLE<span>_</span></div>
+    <div class="nav-tag">adversarial CI/CD testing</div>
+  </div>
+</div>
+
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">crucible attack --target ci.yml</p>
+    <h1>Don't just scan your pipeline.<br>Attack it<span class="cursor" aria-hidden="true"></span></h1>
+    <p class="lede">
+      Traditional scanners read your YAML and report misconfigurations.
+      Crucible goes further where it can: <strong>real subprocess execution,
+      real network chaos, real dependency resolution</strong> — evidence of
+      what actually breaks, backed by static analysis where execution
+      doesn't apply.
+    </p>
+    <div class="install"><span class="p">$</span> pip install crucible-gym &amp;&amp; crucible audit .</div>
+    <div class="cta-row" style="margin-top:1.3rem;">
+      <a class="btn" href="https://pypi.org/project/crucible-gym/">Install Crucible →</a>
+      <a class="cta-note" href="https://github.com/rudranpatra/crucible" style="text-decoration:none;">View on GitHub</a>
+    </div>
+  </div>
+</div>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">How it works</p>
+    <h2>Every run follows the same evidentiary chain</h2>
+    <p class="section-sub">No step is skipped and none is simulated — each stage produces something you can inspect or replay.</p>
+    <div class="pipeline">
+      <div class="step"><div class="n">01</div><div class="name">Attack</div></div>
+      <div class="step"><div class="n">02</div><div class="name">Execute</div></div>
+      <div class="step"><div class="n">03</div><div class="name">Observe</div></div>
+      <div class="step"><div class="n">04</div><div class="name">Prove</div></div>
+      <div class="step"><div class="n">05</div><div class="name">Replay</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">Real output</p>
+    <h2>This is what Crucible found on its own repository</h2>
+    <p class="section-sub">Not a mockup — the actual first run against Crucible's own CI workflow.</p>
+    <div class="term">
+      <div class="term-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span>&nbsp;&nbsp;crucible audit .github/workflows/ci.yml</div>
+      <div class="term-body">Resilience: <span class="score-f">30/100  [F]</span>
+
+Findings:
+  <span class="tag-high">[HIGH]</span>   Supply chain: unpinned_action — actions/checkout@v4,
+           actions/setup-python@v5 not pinned to a commit SHA.
+           Tag mutation = silent RCE in your pipeline.
+  <span class="tag-high">[HIGH]</span>   Dependency: 2 unpinned packages. Any yanked version
+           breaks the build silently.
+  <span class="tag-med">[MEDIUM]</span> Env: GITHUB_TOKEN, PR_NUMBER lack input validation
+
+<span class="trace">Trace: trc_a2e889a909  (replay: crucible replay --trace trc_a2e889a909)</span></div>
+    </div>
+    <p class="trend-note" style="margin-top:0.9rem;">This example is <code style="font-family:var(--mono);">SupplyChainAgent</code>'s static YAML analysis. Five of the six engines below execute real subprocesses with live exit codes — live payload-execution attacks (e.g. injection) are on the roadmap, not in the corpus yet.</p>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">Attack engines</p>
+    <h2>Static analysis where it's reliable. Real execution where it counts.</h2>
+    <div class="agents">
+      <div class="agent"><div class="name">SupplyChainAgent</div><div class="desc">Unpinned actions, script injection, token scope — real YAML analysis</div></div>
+      <div class="agent"><div class="name">TimingAgent</div><div class="desc">Injects real delays before each step, observes the real exit code</div></div>
+      <div class="agent"><div class="name">EnvCorruptionAgent</div><div class="desc">Null, overflow, type-mismatch on env vars via a live probe script</div></div>
+      <div class="agent"><div class="name">StepReorderAgent</div><div class="desc">Runs step commands out of order, surfaces real dependency failures</div></div>
+      <div class="agent"><div class="name">NetworkChaosAgent</div><div class="desc">Real curl probes: latency spikes, DNS flaps, connection resets</div></div>
+      <div class="agent"><div class="name">DependencyDriftAgent</div><div class="desc">Mutated requirements resolved by the real pip resolver</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">Regression tracking · illustrative example</p>
+    <h2>The question that matters isn't the score — it's the trend</h2>
+    <p class="section-sub"><code style="font-family: var(--mono); color: var(--ink);">crucible compare HEAD~1 HEAD</code> catches a PR that quietly weakens the pipeline before it merges. Example shape of a real run below — not this repository's live history.</p>
+    <div class="trend">
+      <div class="trend-row"><span class="date">2026-06-01</span><div class="bar-track"><div class="bar-fill" style="width:92%;background:var(--grade-a)"></div></div><span class="val">92&nbsp;A</span></div>
+      <div class="trend-row"><span class="date">2026-06-08</span><div class="bar-track"><div class="bar-fill" style="width:88%;background:var(--grade-b)"></div></div><span class="val">88&nbsp;B</span></div>
+      <div class="trend-row"><span class="date">2026-06-15</span><div class="bar-track"><div class="bar-fill" style="width:76%;background:var(--grade-c)"></div></div><span class="val">76&nbsp;C</span></div>
+      <div class="trend-row"><span class="date">2026-06-22</span><div class="bar-track"><div class="bar-fill" style="width:67%;background:var(--grade-d)"></div></div><span class="val">67&nbsp;D</span></div>
+    </div>
+    <p class="trend-note">Overall: <span class="down">↓25 pts over 4 runs</span> — the regression a static scanner would never have flagged, because nothing about the YAML looked different.</p>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">Fix → rerun → prove · illustrative example</p>
+    <h2>A regression isn't the end of the story — the reverify is</h2>
+    <p class="section-sub">Same PR comment format either direction: <code style="font-family:var(--mono); color:var(--ink);">crucible compare</code> on the fix branch confirms the exploit is actually blocked, not just that the code changed.</p>
+    <div class="trend">
+      <div class="trend-row"><span class="date">run #1</span><div class="bar-track"><div class="bar-fill" style="width:76%;background:var(--grade-c)"></div></div><span class="val">76&nbsp;C</span></div>
+      <div class="trend-row"><span class="date">run #2</span><div class="bar-track"><div class="bar-fill" style="width:94%;background:var(--grade-a)"></div></div><span class="val">94&nbsp;A</span></div>
+    </div>
+    <p class="trend-note"><span style="color:var(--evidence); font-weight:600;">✅ Verified fixed</span> — the check that failed on run #1 passed on run #2, with a trace linking both.</p>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">Why a paid tier</p>
+    <h2 style="max-width:22ch;">Crucible OSS proves it. Crucible Cloud remembers it — and tells you when it gets worse.</h2>
+    <p class="section-sub">A single run answers "is this vulnerable right now." Regression across a hundred runs, across every repo you own, is the question that actually needs a place to live.</p>
+  </div>
+</section>
+
+<section class="block">
+  <div class="wrap">
+    <p class="label">Pricing</p>
+    <h2>Open core. Paid platform.</h2>
+    <p class="section-sub">Apache 2.0 means the attack engine is free forever — self-hosted, no account, no data leaves your CI. You pay for centralization across repos, not the engine.</p>
+    <div class="tiers">
+      <div class="tier">
+        <div class="tname">Free</div>
+        <div class="tprice">$0 forever</div>
+        <ul>
+          <li>Full attack engine, every attack type</li>
+          <li>CLI, SARIF export, GitHub Action</li>
+          <li>Local trace storage &amp; replay</li>
+        </ul>
+      </div>
+      <div class="tier featured">
+        <div class="tname">Team — Early Access</div>
+        <div class="tprice"><span class="ph">Free during early access</span></div>
+        <ul>
+          <li>Everything in Free</li>
+          <li>Centralized dashboard across repos</li>
+          <li>Regression detection across runs</li>
+          <li>Self-serve API-key onboarding</li>
+        </ul>
+      </div>
+      <div class="tier">
+        <div class="tname">Enterprise</div>
+        <div class="tprice">Talk to us</div>
+        <ul>
+          <li>SSO, RBAC, audit logging</li>
+          <li>Compliance-ready evidence export</li>
+          <li>Uptime SLA, dedicated support</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap">
+    <p class="label">Security &amp; pilots</p>
+    <h2>Designed to receive test results, not repository contents</h2>
+    <p class="lede" style="font-size:1.02rem;">Crucible Cloud is built to receive only the resilience score, grade, and
+    failure descriptions your own CI already produced — never repository
+    contents, never credential values. Full field-by-field breakdown in our
+    security documentation, available on request.</p>
+    <div class="cta-row">
+      <a class="btn" href="mailto:rudran.patra@gmail.com">Book a pilot →</a>
+      <span class="cta-note">rudran.patra@gmail.com</span>
+    </div>
+    <p class="cta-note" style="margin-top:0.9rem;">Evaluating it yourself first? <code style="font-family:var(--mono); color:var(--ink-dim);">pip install crucible-gym</code> runs entirely on your own infrastructure — no account, no data leaves your CI.</p>
+  </div>
+</section>
+
+<div class="footer-fine">
+  <div class="wrap" style="display:flex; justify-content:space-between; width:100%; flex-wrap:wrap; gap:0.6rem;">
+    <span>Crucible · Apache 2.0 core · github.com/rudranpatra/crucible</span>
+    <span>Adversarial Execution Testing for CI/CD</span>
+  </div>
+</div>
