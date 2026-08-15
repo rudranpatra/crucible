@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crucible-gym"
-version = "0.4.1"
+version = "0.4.2"
 description = "Adversarial Intelligence Engine for CI/CD Pipelines"
 readme = "crucible/README.md"
 license = "Apache-2.0"

@@ -73,7 +73,7 @@ Trace: trc_a2e889a909  (replay: crucible replay --trace trc_a2e889a909)
 
 ---
 
-## Six adversarial agents
+## Adversarial agents
 
 All agents execute real subprocesses, dependency resolution, command execution, network probes, or workflow analysis.
 
@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: rudranpatra/crucible@v0.3.0
+      - uses: rudranpatra/crucible@v0.4.2
         with:
           target: .github/workflows/ci.yml
           github-comment: 'true'

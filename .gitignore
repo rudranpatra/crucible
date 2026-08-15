@@ -56,6 +56,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Graphify local knowledge graph artifacts (regenerated on demand)
+graphify-out/
+
 # Distribution
 dist/
 build/

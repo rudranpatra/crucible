@@ -7,6 +7,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-08-15
+
 ### Added
 - `crucible compare --github-comment` — posts a PR comment that leads with
   whether the change made the pipeline *weaker*, not just the absolute
