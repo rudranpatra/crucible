@@ -106,3 +106,65 @@ def test_publish_raises_on_http_error_for_the_runner_to_swallow(monkeypatch):
     except urllib.error.HTTPError:
         return
     raise AssertionError("expected the HTTPError to propagate to the runner's guard")
+
+
+import asyncio  # noqa: E402
+
+from runner import CrucibleRunner  # noqa: E402
+
+
+def test_runner_invokes_callback_once_per_attack_result(tmp_path):
+    collected = []
+    runner = CrucibleRunner(traces_dir=str(tmp_path), verbose=False)
+
+    result = asyncio.run(
+        runner.run(
+            demo_mode=True,
+            attacks=["env"],
+            seed=1234,
+            on_attack_result=lambda trace_id, index, attack: collected.append((trace_id, index, attack)),
+        )
+    )
+
+    assert collected, "expected at least one AttackResult to be published"
+    assert all(trace_id == result["trace_id"] for trace_id, _, _ in collected)
+    assert [index for _, index, _ in collected] == list(range(len(collected)))
+    assert all(hasattr(attack, "failure_triggered") for _, _, attack in collected)
+
+
+def test_runner_survives_a_failing_sink(tmp_path):
+    def explode(trace_id, index, attack):
+        raise RuntimeError("cloud is down")
+
+    runner = CrucibleRunner(traces_dir=str(tmp_path), verbose=False)
+    result = asyncio.run(
+        runner.run(demo_mode=True, attacks=["env"], seed=1234, on_attack_result=explode)
+    )
+
+    # the run still completes and still returns the full aggregate report
+    assert "resilience_score" in result
+    assert "grade" in result
+    assert result["trace_id"]
+
+
+def test_run_without_a_callback_is_unchanged(tmp_path):
+    runner = CrucibleRunner(traces_dir=str(tmp_path), verbose=False)
+    result = asyncio.run(runner.run(demo_mode=True, attacks=["env"], seed=1234))
+
+    assert set(result) >= {
+        "trace_id",
+        "crucible_version",
+        "target",
+        "resilience_score",
+        "grade",
+        "components",
+        "failure_count",
+        "blast_radius",
+        "top_vulnerabilities",
+        "replay_command",
+        "engine_status",
+        "agent_reflections",
+        "shadow_summary",
+        "seed",
+        "failure_points",
+    }

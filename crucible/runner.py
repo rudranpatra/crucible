@@ -7,7 +7,7 @@ This is the only place that knows about all layers (engine, agents, scorer, memo
 import asyncio
 import logging
 import random
-from typing import List, Optional, Dict
+from typing import Any, Callable, List, Optional, Dict
 from pathlib import Path
 
 from core.engine import CrucibleEngine  # noqa: E402
@@ -94,6 +94,7 @@ class CrucibleRunner:
         demo_mode: bool = False,
         github_comment: bool = False,
         seed: Optional[int] = None,
+        on_attack_result: Optional[Callable[[str, int, Any], None]] = None,
     ) -> Dict:
         attacks = attacks or ALL_ATTACKS
         tags = tags or []
@@ -236,6 +237,25 @@ class CrucibleRunner:
                 self._log("")
 
                 all_results.extend(results)
+
+        # ── Per-attack publishing ─────────────────────────────────────────────
+        # One call per AttackResult, in order, covering both the shadow and the
+        # standard path. Deliberately after the concurrent attack phase, not
+        # inside it: sink I/O in the attack path would distort the
+        # recovery_time_ms the attacks are measuring.
+        #
+        # The guard lives here rather than in each sink, so no sink — present or
+        # future — can fail an attack run. asyncio.CancelledError is a
+        # BaseException, so `except Exception` still lets cancellation through.
+        if on_attack_result:
+            for index, attack_result in enumerate(all_results):
+                try:
+                    on_attack_result(trace.trace_id, index, attack_result)
+                except Exception as exc:
+                    logger.warning(
+                        "attack_result_sink_failed trace=%s index=%s error=%s",
+                        trace.trace_id, index, exc,
+                    )
 
         # ── Scoring ───────────────────────────────────────────────────────────
 
