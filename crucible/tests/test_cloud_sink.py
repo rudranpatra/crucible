@@ -168,3 +168,74 @@ def test_run_without_a_callback_is_unchanged(tmp_path):
         "seed",
         "failure_points",
     }
+
+
+import argparse  # noqa: E402
+
+import pytest  # noqa: E402
+
+import cli.crucible as cli  # noqa: E402
+
+
+def _attack_args(**overrides):
+    defaults = dict(
+        target=None, demo=True, attacks="env", tags=None, rich=False, shadow=False,
+        github_comment=False, sarif=None, seed=1234, quiet=True, json=False, cloud=False,
+    )
+    defaults.update(overrides)
+    return argparse.Namespace(**defaults)
+
+
+def test_attack_parser_accepts_cloud_flag(monkeypatch):
+    """argparse must accept --cloud (exit 2 would mean 'unrecognised argument'),
+    and cmd_attack must then own the missing-credentials failure (exit 1)."""
+    monkeypatch.delenv("CRUCIBLE_CLOUD_URL", raising=False)
+    monkeypatch.delenv("CRUCIBLE_API_KEY", raising=False)
+    monkeypatch.setattr(sys, "argv", ["crucible", "attack", "--demo", "--quiet", "--cloud"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main()
+    assert excinfo.value.code == 1, "exit 2 means argparse rejected --cloud"
+
+
+def test_cmd_attack_exits_when_cloud_env_missing(monkeypatch):
+    monkeypatch.delenv("CRUCIBLE_CLOUD_URL", raising=False)
+    monkeypatch.delenv("CRUCIBLE_API_KEY", raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.cmd_attack(_attack_args(cloud=True))
+    assert excinfo.value.code == 1
+
+
+def test_cmd_attack_passes_sink_publish_when_cloud_enabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("CRUCIBLE_CLOUD_URL", "https://cloud.example")
+    monkeypatch.setenv("CRUCIBLE_API_KEY", "cru_testkey")
+    monkeypatch.chdir(tmp_path)
+
+    published = []
+
+    def fake_publish(self, trace_id, index, result):
+        published.append((trace_id, index))
+
+    monkeypatch.setattr(CrucibleCloudSink, "publish", fake_publish)
+
+    cli.cmd_attack(_attack_args(cloud=True))
+
+    assert published, "expected --cloud to publish at least one attack"
+    assert [index for _, index in published] == list(range(len(published)))
+
+
+def test_cmd_attack_publishes_nothing_without_cloud_flag(monkeypatch, tmp_path):
+    monkeypatch.setenv("CRUCIBLE_CLOUD_URL", "https://cloud.example")
+    monkeypatch.setenv("CRUCIBLE_API_KEY", "cru_testkey")
+    monkeypatch.chdir(tmp_path)
+
+    published = []
+    monkeypatch.setattr(
+        CrucibleCloudSink, "publish",
+        lambda self, trace_id, index, result: published.append(index),
+    )
+
+    cli.cmd_attack(_attack_args(cloud=False))
+
+    assert published == [], "env vars alone must not trigger per-attack ingestion"

@@ -44,6 +44,21 @@ def cmd_attack(args):
     )
     attacks = args.attacks.split(',') if args.attacks else None
 
+    # Per-attack ingestion is opt-in. CRUCIBLE_CLOUD_URL/CRUCIBLE_API_KEY are
+    # already set in every CI job running the cloud uploader, so triggering on
+    # their presence alone would silently start POSTing on upgrade.
+    on_attack_result = None
+    if getattr(args, 'cloud', False):
+        from sinks.crucible_cloud_sink import CrucibleCloudSink
+        sink = CrucibleCloudSink.from_env()
+        if sink is None:
+            print(
+                "--cloud requires CRUCIBLE_CLOUD_URL and CRUCIBLE_API_KEY to be set.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        on_attack_result = sink.publish
+
     result = asyncio.run(runner.run(
         target_path=args.target if not args.demo else None,
         attacks=attacks,
@@ -51,6 +66,7 @@ def cmd_attack(args):
         demo_mode=args.demo or not args.target,
         github_comment=getattr(args, 'github_comment', False),
         seed=getattr(args, 'seed', None),
+        on_attack_result=on_attack_result,
     ))
 
     if getattr(args, 'sarif', None):
@@ -545,6 +561,9 @@ examples:
     ap.add_argument('--seed', type=int, help='Fixed random seed for deterministic replay')
     ap.add_argument('--quiet', '-q', action='store_true', help='Suppress output (just print score)')
     ap.add_argument('--json', '-j', action='store_true', help='Output full result as JSON')
+    ap.add_argument('--cloud', action='store_true',
+                    help='Stream each attack result to Crucible Cloud '
+                         '(requires CRUCIBLE_CLOUD_URL and CRUCIBLE_API_KEY)')
 
     # compare
     cp = subparsers.add_parser('compare', help='Compare resilience between two git refs')
