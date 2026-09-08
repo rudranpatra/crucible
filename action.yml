@@ -47,7 +47,12 @@ runs:
   steps:
     - name: Install Crucible
       shell: bash
-      run: pip install crucible-gym --quiet
+      # Pinned, not "crucible-gym --quiet": 0.5.0 split local mode down to a
+      # basic supply-chain check (see CHANGELOG.md) with a different scoring
+      # formula. Unpinned here would have silently changed every consumer's
+      # fail-below gate the moment 0.5.0 published. Bump this deliberately,
+      # with a version note in this repo's own CHANGELOG, not by default.
+      run: pip install crucible-gym==0.4.2 --quiet
 
     - name: Run adversarial attack
       id: run

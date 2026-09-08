@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List
 
-from threats.schema import Threat
+from crucible.threats.schema import Threat
 
 _SKIPPED_STATUSES = {"mitigated", "notapplicable", "not applicable"}
 

@@ -3,14 +3,10 @@ v0.3.0 tests: GitLab CI parser, SARIF export, agent compatibility.
 """
 
 import json
-import os
-import sys
-import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from integrations.gitlab.parser import GitLabCIParser, create_demo_gitlab_target
-from integrations.github.sarif import generate_sarif, write_sarif
+from crucible.integrations.gitlab.parser import GitLabCIParser, create_demo_gitlab_target
+from crucible.integrations.github.sarif import generate_sarif, write_sarif
 
 
 # ── GitLab CI Parser ──────────────────────────────────────────────────────────
@@ -117,37 +113,9 @@ build:
                       'critical_order_steps', 'downstream_steps', 'has_retry_logic', 'timeout_ms'):
             assert field in target, f"Missing required field: {field}"
 
-    @pytest.mark.asyncio
-    async def test_gitlab_target_compatible_with_timing_agent(self):
-        from core.engine import CrucibleEngine
-        from attacks.strategies import TimingAgent
-        engine = CrucibleEngine()
-        target = create_demo_gitlab_target()
-        trace = engine.begin_trace(target['name'])
-        results = await TimingAgent(engine).attack(target, trace)
-        assert len(results) > 0
-        assert all(r.raw_output is not None for r in results)
-
-    @pytest.mark.asyncio
-    async def test_gitlab_target_compatible_with_env_agent(self):
-        from core.engine import CrucibleEngine
-        from attacks.strategies import EnvCorruptionAgent
-        engine = CrucibleEngine()
-        target = create_demo_gitlab_target()
-        trace = engine.begin_trace(target['name'])
-        results = await EnvCorruptionAgent(engine).attack(target, trace)
-        assert len(results) > 0
-
-    @pytest.mark.asyncio
-    async def test_gitlab_target_compatible_with_supply_chain_agent(self):
-        from core.engine import CrucibleEngine
-        from attacks.strategies import SupplyChainAgent
-        engine = CrucibleEngine()
-        target = create_demo_gitlab_target()
-        trace = engine.begin_trace(target['name'])
-        results = await SupplyChainAgent(engine).attack(target, trace)
-        # supply_chain_risks are pre-populated by GitLabCIParser, so there should be findings
-        assert len(results) > 0
+    # GitLab-target compatibility with the full attack agent set (timing, env,
+    # supply chain) moved to crucible-cloud/tests/engine/ along with the
+    # engine those agents now live in.
 
 
 # ── SARIF Export ──────────────────────────────────────────────────────────────

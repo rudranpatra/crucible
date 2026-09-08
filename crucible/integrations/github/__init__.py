@@ -1,3 +1,3 @@
-from integrations.github.commenter import GitHubCommenter
+from crucible.integrations.github.commenter import GitHubCommenter
 
 __all__ = ["GitHubCommenter"]

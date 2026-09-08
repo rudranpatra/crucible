@@ -7,6 +7,61 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] — OSS/Cloud engine split
+
+`0.4.2` is the last release with a full adversarial engine running entirely
+offline. From `0.5.0`, `crucible-gym` ships a thin client: a basic local
+engine for zero-signup use, and a full engine reachable only through
+Crucible Cloud. This is a deliberate architecture change, not a bug — see
+`CODEX_OSS_CLOUD_SPLIT.md` for the full rationale and migration plan.
+
+### Changed — read this before upgrading from 0.4.x
+- **Local mode is now basic, not full.** `crucible attack`/`crucible audit`
+  without `--engine cloud` run one static check (unpinned GitHub Actions
+  references) instead of the previous 6-agent engine. Scoring is a simple
+  flat deduction, not the prior resilience formula — scores from 0.4.x and
+  0.5.0 local mode are **not comparable**.
+- **`--engine cloud` unlocks the full engine** (all 6 attack types, real
+  resilience scoring) on `attack`, `audit`, `compare`, and `badge`.
+  Requires `CRUCIBLE_CLOUD_URL` and `CRUCIBLE_API_KEY` — Crucible Cloud is
+  not yet deployed anywhere public, so this currently means self-hosting
+  `crucible-cloud`.
+- `crucible attack`'s per-attack cloud-ingestion flag is renamed
+  `--publish-cloud` (`--cloud` still works as a deprecated alias). This is
+  a different feature from `--engine cloud`: `--publish-cloud` decides
+  whether results are *also* streamed to Cloud's ingest API for historical
+  tracking, regardless of which engine ran the attack.
+
+### Removed
+- **`crucible validate`** — its threat-planning/validation engine
+  (`ThreatPlanner`/`ThreatValidator`) moved to Cloud, which does not yet
+  expose an endpoint for it. Returns in a future release once
+  `/v1/validate` exists.
+- **`crucible trend`, `replay`, `patterns`, `evolution`, `serve`** — all
+  depended on trace persistence and evolutionary scoring
+  (`memory.trace_memory`, `scoring.darwin_scorer`) that moved to Cloud with
+  no CLI-callable equivalent yet. Shipping subcommands that always fail
+  was worse than removing them; they return once Cloud exposes the
+  matching endpoints.
+
+### Fixed
+- `action.yml` (the published GitHub Action) pinned `pip install
+  crucible-gym --quiet` unpinned. Every repo using
+  `uses: rudranpatra/crucible@...` would have silently downgraded to
+  0.5.0's basic local engine on next run, with `fail-below` gates
+  evaluated against a completely different scoring formula with no
+  warning. Pinned to `crucible-gym==0.4.2` until the Action is deliberately
+  upgraded with its own version bump and changelog note.
+
+### Migration notes
+- If you depend on the full local engine or any of the removed commands,
+  **stay on `0.4.2`** (`pip install crucible-gym==0.4.2`) until Cloud
+  ships the missing endpoints, or self-host `crucible-cloud` and use
+  `--engine cloud`.
+- `threats/schema.py`, `threats/importer.py`, all `integrations/*`
+  parsers, and `dashboard/terminal.py` are unchanged and still fully
+  local/offline.
+
 ## [0.4.2] — 2026-08-15
 
 ### Added
