@@ -79,10 +79,12 @@ class CrucibleRunner:
         attacks: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
         demo_mode: bool = False,
-        github_comment: bool = False,
         seed: Optional[int] = None,
         on_attack_result: Optional[Callable[[str, int, Any], None]] = None,
     ) -> Dict:
+        # No github_comment param: posting a PR comment needs the calling CI
+        # job's GITHUB_TOKEN/GITHUB_REPOSITORY/PR_NUMBER, which only the CLI
+        # (not this runner, and not Cloud's server process) has — see cmd_attack.
         if seed is None:
             seed = random.randint(0, 2 ** 32 - 1)
         random.seed(seed)

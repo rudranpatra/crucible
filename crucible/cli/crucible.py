@@ -31,6 +31,7 @@ import tempfile
 
 from crucible.runner import CrucibleRunner, ALL_ATTACKS, CloudExecutionError
 from crucible.integrations.github.commenter import generate_svg_badge
+from crucible.scoring.basic_scorer import BasicScorer
 
 
 def _engine_mode(args) -> str:
@@ -81,13 +82,25 @@ def cmd_attack(args):
             attacks=attacks,
             tags=args.tags.split(',') if args.tags else [],
             demo_mode=args.demo or not args.target,
-            github_comment=getattr(args, 'github_comment', False),
             seed=getattr(args, 'seed', None),
             on_attack_result=on_attack_result,
         ))
     except CloudExecutionError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    if getattr(args, 'github_comment', False):
+        # Posted by the CLI, not the engine: GitHubCommenter reads
+        # GITHUB_TOKEN/GITHUB_REPOSITORY/PR_NUMBER from this process's env,
+        # which is correct whether the run executed locally or on Cloud —
+        # those vars belong to the calling CI job, not the Cloud server.
+        from crucible.integrations.github.commenter import GitHubCommenter
+        commenter = GitHubCommenter()
+        if commenter.is_configured():
+            ok = commenter.post_pr_comment(result)
+            print("GitHub PR comment posted." if ok else "GitHub PR comment failed.")
+        else:
+            print("GitHub commenter not configured (set GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER).")
 
     if getattr(args, 'sarif', None):
         from crucible.integrations.github.sarif import write_sarif
@@ -112,9 +125,12 @@ def cmd_attack(args):
 
 def cmd_audit(args):
     """
-    Focused supply-chain + dependency audit against a real workflow file.
-    Designed to be the first command a security engineer runs.
+    Focused supply-chain audit against a real workflow file (local mode).
+    With --engine cloud, also runs dependency + env checks. Designed to be
+    the first command a security engineer runs.
     """
+    engine_mode = _engine_mode(args)
+    audit_attacks = ['supply_chain', 'dependency', 'env'] if engine_mode == "cloud" else ['supply_chain']
     target = args.target or '.'
     from pathlib import Path
     import glob as _glob
@@ -140,10 +156,10 @@ def cmd_audit(args):
     for wf_path in files:
         print(f"\nAuditing: {wf_path}")
         print("-" * 60)
-        runner = CrucibleRunner(verbose=False, mode=_engine_mode(args))
+        runner = CrucibleRunner(verbose=False, mode=engine_mode)
         result = asyncio.run(runner.run(
             target_path=wf_path,
-            attacks=['supply_chain', 'dependency', 'env'],
+            attacks=audit_attacks,
         ))
 
         score = result['resilience_score']
@@ -184,7 +200,7 @@ def cmd_badge(args):
     elif args.score is not None:
         result = {
             'resilience_score': args.score,
-            'grade': _score_to_grade(args.score),
+            'grade': BasicScorer().grade(args.score),
         }
     else:
         print("Provide --target <workflow.yml> or --score <0-100>", file=sys.stderr)
@@ -289,20 +305,6 @@ def cmd_status(args):
     print(f"Engine mode:       {_engine_mode(args)}")
     print(f"Attack types:      {', '.join(ALL_ATTACKS)} (local); full set requires --engine cloud")
     print("Trace history, patterns, and evolution require --engine cloud.")
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-def _score_to_grade(score: float) -> str:
-    if score >= 90:
-        return 'A'
-    if score >= 75:
-        return 'B'
-    if score >= 60:
-        return 'C'
-    if score >= 40:
-        return 'D'
-    return 'F'
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
