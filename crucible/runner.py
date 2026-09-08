@@ -35,7 +35,7 @@ LOCAL_ATTACK_REGISTRY = {
     "supply_chain": BasicSupplyChainAgent,
     "supply_chain_basic": BasicSupplyChainAgent,
 }
-ALL_ATTACKS = list(LOCAL_ATTACK_REGISTRY.keys())
+ALL_ATTACKS = ["supply_chain"]
 
 
 class CloudExecutionError(RuntimeError):

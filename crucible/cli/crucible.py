@@ -316,7 +316,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples (local mode — basic supply-chain check, no signup):
-  crucible audit .                       # supply-chain + dependency audit (start here)
+  crucible audit .                       # supply-chain audit (start here)
   crucible audit .github/workflows/ci.yml
   crucible attack --target ci.yml
   crucible compare HEAD~1 HEAD           # did this change make CI more or less resilient?
@@ -334,7 +334,7 @@ evolution, serve, --rich, --shadow.
     subparsers = parser.add_subparsers(dest='command')
 
     # audit
-    aup = subparsers.add_parser('audit', help='Supply-chain + dependency audit (GitHub Actions + GitLab CI)')
+    aup = subparsers.add_parser('audit', help='Supply-chain audit (adds dependency + env with --engine cloud)')
     aup.add_argument('target', nargs='?', default='.', help='Workflow file or repo root (default: .)')
     aup.add_argument('--sarif', metavar='FILE', help='Write findings as SARIF (for GitHub Security tab)')
     aup.add_argument('--json', '-j', action='store_true')
