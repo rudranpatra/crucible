@@ -7,6 +7,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] — 0.5.0 launch polish
+
+### Fixed
+- `crucible attack` with no `--attacks` no longer runs the `supply_chain` and
+  `supply_chain_basic` aliases twice in local mode.
+- `crucible audit` help text and examples now match what the local basic
+  engine actually does (supply-chain audit; dependency/env are cloud-only).
+
 ## [0.5.0] — OSS/Cloud engine split
 
 `0.4.2` is the last release with a full adversarial engine running entirely
