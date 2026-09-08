@@ -11,7 +11,7 @@ import urllib.request
 import urllib.error
 from typing import Dict, List, Optional
 
-from integrations.github.sarif import _match_rule
+from crucible.integrations.github.sarif import _match_rule
 
 logger = logging.getLogger(__name__)
 

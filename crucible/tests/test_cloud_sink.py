@@ -1,14 +1,12 @@
 """CrucibleCloudSink — per-attack POSTs to Crucible Cloud over stdlib urllib."""
 
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from sinks.crucible_cloud_sink import CrucibleCloudSink
+from crucible.sinks.crucible_cloud_sink import CrucibleCloudSink
 
 
 class FakeAttackResult:
@@ -110,7 +108,22 @@ def test_publish_raises_on_http_error_for_the_runner_to_swallow(monkeypatch):
 
 import asyncio  # noqa: E402
 
-from runner import CrucibleRunner  # noqa: E402
+from crucible.runner import CrucibleRunner  # noqa: E402
+
+
+def _unpinned_action_workflow(tmp_path):
+    wf = tmp_path / "ci.yml"
+    wf.write_text(
+        "name: ci\n"
+        "on: push\n"
+        "jobs:\n"
+        "  build:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - name: checkout\n"
+        "        uses: actions/checkout@v4\n"
+    )
+    return str(wf)
 
 
 def test_runner_invokes_callback_once_per_attack_result(tmp_path):
@@ -119,8 +132,8 @@ def test_runner_invokes_callback_once_per_attack_result(tmp_path):
 
     result = asyncio.run(
         runner.run(
-            demo_mode=True,
-            attacks=["env"],
+            target_path=_unpinned_action_workflow(tmp_path),
+            attacks=["supply_chain"],
             seed=1234,
             on_attack_result=lambda trace_id, index, attack: collected.append((trace_id, index, attack)),
         )
@@ -138,7 +151,10 @@ def test_runner_survives_a_failing_sink(tmp_path):
 
     runner = CrucibleRunner(traces_dir=str(tmp_path), verbose=False)
     result = asyncio.run(
-        runner.run(demo_mode=True, attacks=["env"], seed=1234, on_attack_result=explode)
+        runner.run(
+            target_path=_unpinned_action_workflow(tmp_path),
+            attacks=["supply_chain"], seed=1234, on_attack_result=explode,
+        )
     )
 
     # the run still completes and still returns the full aggregate report
@@ -174,13 +190,13 @@ import argparse  # noqa: E402
 
 import pytest  # noqa: E402
 
-import cli.crucible as cli  # noqa: E402
+import crucible.cli.crucible as cli  # noqa: E402
 
 
 def _attack_args(**overrides):
     defaults = dict(
         target=None, demo=True, attacks="env", tags=None, rich=False, shadow=False,
-        github_comment=False, sarif=None, seed=1234, quiet=True, json=False, cloud=False,
+        github_comment=False, sarif=None, seed=1234, quiet=True, json=False, publish_cloud=False,
     )
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -203,7 +219,7 @@ def test_cmd_attack_exits_when_cloud_env_missing(monkeypatch):
     monkeypatch.delenv("CRUCIBLE_API_KEY", raising=False)
 
     with pytest.raises(SystemExit) as excinfo:
-        cli.cmd_attack(_attack_args(cloud=True))
+        cli.cmd_attack(_attack_args(publish_cloud=True))
     assert excinfo.value.code == 1
 
 
@@ -219,9 +235,10 @@ def test_cmd_attack_passes_sink_publish_when_cloud_enabled(monkeypatch, tmp_path
 
     monkeypatch.setattr(CrucibleCloudSink, "publish", fake_publish)
 
-    cli.cmd_attack(_attack_args(cloud=True))
+    wf_path = _unpinned_action_workflow(tmp_path)
+    cli.cmd_attack(_attack_args(publish_cloud=True, demo=False, target=wf_path, attacks="supply_chain"))
 
-    assert published, "expected --cloud to publish at least one attack"
+    assert published, "expected --publish-cloud to publish at least one attack"
     assert [index for _, index in published] == list(range(len(published)))
 
 
@@ -236,6 +253,6 @@ def test_cmd_attack_publishes_nothing_without_cloud_flag(monkeypatch, tmp_path):
         lambda self, trace_id, index, result: published.append(index),
     )
 
-    cli.cmd_attack(_attack_args(cloud=False))
+    cli.cmd_attack(_attack_args(publish_cloud=False))
 
     assert published == [], "env vars alone must not trigger per-attack ingestion"

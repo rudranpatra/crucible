@@ -1,11 +1,7 @@
 """Tests for Rich terminal dashboard."""
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from io import StringIO
-from dashboard.terminal import CrucibleDashboard
+from crucible.dashboard.terminal import CrucibleDashboard
 
 
 class TestCrucibleDashboard:

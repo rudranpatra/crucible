@@ -1,12 +1,9 @@
 """Tests for GitHub commenter, badge generator, and Playwright parser."""
 
-import os
-import sys
 import pytest
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from integrations.github.commenter import GitHubCommenter, generate_svg_badge
-from integrations.playwright.parser import PlaywrightParser, create_demo_playwright_target
+from crucible.integrations.github.commenter import GitHubCommenter, generate_svg_badge
+from crucible.integrations.playwright.parser import PlaywrightParser, create_demo_playwright_target
 
 
 # ── GitHubCommenter ───────────────────────────────────────────────────────────
