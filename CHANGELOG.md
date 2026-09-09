@@ -7,6 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] — Machine-readable JSON output
+
+### Fixed
+- `crucible attack --json` now emits only JSON on stdout, allowing the Cloud
+  uploader to consume the result reliably.
+
 ## [0.5.2] — Release metadata and documentation cleanup
 
 ### Changed
