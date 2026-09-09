@@ -52,7 +52,7 @@ def _cloud_only(feature: str):
 def cmd_attack(args):
     try:
         runner = CrucibleRunner(
-            verbose=not args.quiet,
+            verbose=not args.quiet and not args.json,
             mode=_engine_mode(args),
         )
     except NotImplementedError as e:
