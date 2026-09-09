@@ -7,6 +7,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] — Release metadata and documentation cleanup
+
+### Changed
+- Bumped the package version after the 0.5.1 PyPI release.
+- Kept internal OSS/Cloud planning documentation in the private
+  `crucible-cloud` repository.
+
 ## [0.5.1] — 0.5.0 launch polish
 
 ### Fixed
