@@ -21,7 +21,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 offline. From `0.5.0`, `crucible-gym` ships a thin client: a basic local
 engine for zero-signup use, and a full engine reachable only through
 Crucible Cloud. This is a deliberate architecture change, not a bug — see
-`CODEX_OSS_CLOUD_SPLIT.md` for the full rationale and migration plan.
+the project's internal architecture records for the full rationale and migration plan.
 
 ### Changed — read this before upgrading from 0.4.x
 - **Local mode is now basic, not full.** `crucible attack`/`crucible audit`

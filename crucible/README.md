@@ -285,7 +285,7 @@ crucible/
 # core/engine.py, core/shadow_runner.py, attacks/strategies.py (5 of 6
 # agents), threats/planner.py, threats/validator.py, scoring/scorer.py,
 # scoring/darwin_scorer.py, memory/trace_memory.py, agents/shadow_agent.py,
-# dashboard/server.py — see CHANGELOG.md and CODEX_OSS_CLOUD_SPLIT.md.
+# dashboard/server.py — see CHANGELOG.md.
 ```
 
 **Architecture rule:** the local engine and the Cloud engine are independent implementations — `crucible/agents/base_agent.py` is not a subset of the Cloud base class, it's a separate, deliberately simpler one. Only `runner.py` chooses which to call. No LLM, no external API calls other than Cloud itself.
