@@ -36,7 +36,7 @@ outputs:
     description: 'Resilience grade A–F'
     value: ${{ steps.run.outputs.grade }}
   trace-id:
-    description: 'Trace ID — use with: crucible replay --trace <id>'
+    description: 'Trace ID for the uploaded run'
     value: ${{ steps.run.outputs.trace_id }}
   regression:
     description: 'true if score dropped more than 5 points vs previous run'
@@ -51,12 +51,12 @@ runs:
       # version note in this repo's own CHANGELOG, not by default — a bare
       # `pip install crucible-gym` would silently change every consumer's
       # fail-below gate (and, historically, their scoring formula) the
-      # moment a new release published. Bumped 0.4.2 -> 0.5.3 (current
+      # moment a new release published. Bumped 0.4.2 -> 0.5.4 (current
       # stable per CHANGELOG.md/pyproject.toml) to stop running a known-stale,
       # unsandboxed local engine in consumer CI. See CHANGELOG.md for what
       # changed along the way (0.5.0 split local mode down to a static
       # supply-chain check; no live subprocess attacks run locally any more).
-      run: pip install crucible-gym==0.5.3 --quiet
+      run: pip install crucible-gym==0.5.4 --quiet
 
     - name: Run adversarial attack
       id: run
@@ -65,11 +65,16 @@ runs:
         GITHUB_TOKEN: ${{ env.GITHUB_TOKEN }}
         GITHUB_REPOSITORY: ${{ github.repository }}
         PR_NUMBER: ${{ github.event.number }}
+        CRUCIBLE_TARGET: ${{ inputs.target }}
+        CRUCIBLE_ATTACKS: ${{ inputs.attacks }}
+        CRUCIBLE_GITHUB_COMMENT: ${{ inputs.github-comment }}
+        CRUCIBLE_SARIF_OUTPUT: ${{ inputs.sarif-output }}
+        CRUCIBLE_FAIL_BELOW: ${{ inputs.fail-below }}
       run: |
-        ARGS="--target ${{ inputs.target }}"
-        [ -n "${{ inputs.attacks }}" ] && ARGS="$ARGS --attacks ${{ inputs.attacks }}"
-        [ "${{ inputs.github-comment }}" = "true" ] && ARGS="$ARGS --github-comment"
-        [ -n "${{ inputs.sarif-output }}" ] && ARGS="$ARGS --sarif ${{ inputs.sarif-output }}"
+        ARGS=(--target "$CRUCIBLE_TARGET")
+        [ -n "$CRUCIBLE_ATTACKS" ] && ARGS+=(--attacks "$CRUCIBLE_ATTACKS")
+        [ "$CRUCIBLE_GITHUB_COMMENT" = "true" ] && ARGS+=(--github-comment)
+        [ -n "$CRUCIBLE_SARIF_OUTPUT" ] && ARGS+=(--sarif "$CRUCIBLE_SARIF_OUTPUT")
 
         # ponytail: `crucible attack` (and anything it subprocess-spawns) gets
         # an allowlisted env, not this step's full inherited environment —
@@ -88,20 +93,20 @@ runs:
           PATH="$PATH" HOME="$HOME" LANG="$LANG" LC_ALL="$LC_ALL" \
           TMPDIR="$TMPDIR" TEMP="$TEMP" TMP="$TMP" \
           GITHUB_TOKEN="$GITHUB_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" PR_NUMBER="$PR_NUMBER" \
-          crucible attack $ARGS --json > /tmp/crucible_result.json || true
+          crucible attack "${ARGS[@]}" --json > /tmp/crucible_result.json || true
 
         SCORE=$(python3 -c "import json; print(int(json.load(open('/tmp/crucible_result.json')).get('resilience_score', 0)))" 2>/dev/null || echo "0")
         GRADE=$(python3 -c "import json; print(json.load(open('/tmp/crucible_result.json')).get('grade', 'F'))" 2>/dev/null || echo "F")
         TRACE=$(python3 -c "import json; print(json.load(open('/tmp/crucible_result.json')).get('trace_id', ''))" 2>/dev/null || echo "")
 
-        echo "score=$SCORE" >> $GITHUB_OUTPUT
-        echo "grade=$GRADE" >> $GITHUB_OUTPUT
-        echo "trace_id=$TRACE" >> $GITHUB_OUTPUT
-        echo "regression=false" >> $GITHUB_OUTPUT
+        echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+        echo "grade=$GRADE" >> "$GITHUB_OUTPUT"
+        echo "trace_id=$TRACE" >> "$GITHUB_OUTPUT"
+        echo "regression=false" >> "$GITHUB_OUTPUT"
 
         echo "Resilience: $SCORE/100 ($GRADE)  trace: $TRACE"
 
-        THRESHOLD="${{ inputs.fail-below }}"
+        THRESHOLD="$CRUCIBLE_FAIL_BELOW"
         if [ "$THRESHOLD" -gt "0" ] 2>/dev/null && [ "$SCORE" -lt "$THRESHOLD" ]; then
           echo "::error::Crucible: resilience score $SCORE/100 is below threshold $THRESHOLD/100"
           exit 1

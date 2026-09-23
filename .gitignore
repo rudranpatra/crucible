@@ -37,7 +37,11 @@ traces/
 *.crucible
 
 # Internal dev documents
-crucible/CLAUDE_CODE_PROMPT.md
+crucible/*.md
+*.md
+!crucible/README.md
+!README.md
+READINESS_REPORT.md
 
 # IDE
 .idea/

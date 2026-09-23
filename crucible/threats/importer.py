@@ -17,7 +17,7 @@ imported — "Mitigated" / "NotApplicable" threats don't need re-validation.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from crucible.threats.schema import Threat
 
@@ -98,7 +98,7 @@ class ThreatDragonImporter:
         framework: str,
         component: str,
         diagram_title: str = "",
-    ) -> Threat:
+    ) -> Optional[Threat]:
         if not raw.get("title") and not raw.get("description"):
             return None
 

@@ -16,7 +16,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
   yet). `crucible attack --publish-cloud` also now exits non-zero and prints
   an error listing how many attack results failed to upload, instead of
   exiting 0 on total upload failure.
-- `action.yml` bumped its pinned `crucible-gym` from `0.4.2` to `0.5.3`
+- `action.yml` bumped its pinned `crucible-gym` from `0.4.2` to `0.5.4`
   (current stable) — the Action was running a known-stale release with a
   full local adversarial engine long after 0.5.0 moved that engine to Cloud.
   The attack subprocess launch is now also given an allowlisted environment
@@ -30,6 +30,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
   real `ThreatPlanner`/`ThreatValidator` engine again (Cloud-only, same
   explicit `--engine cloud` requirement as `attack`/`audit`/`compare`).
   `--demo`, `--target`, `--seed`, `--json`, `--include-mitigated` all work.
+
+## [0.5.4] - 2026-09-23
 
 ## [0.5.3] — Machine-readable JSON output
 

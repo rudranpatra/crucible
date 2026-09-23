@@ -97,7 +97,7 @@ class PlaywrightParser:
 
     def _build_steps_js(self, content: str) -> List[Dict]:
         """Extract ordered interaction steps from JS/TS content."""
-        steps = []
+        steps: List[Dict] = []
         lines = content.splitlines()
 
         patterns = [
@@ -153,7 +153,7 @@ class PlaywrightParser:
         )
 
     def _build_steps_python(self, content: str) -> List[Dict]:
-        steps = []
+        steps: List[Dict] = []
         lines = content.splitlines()
         patterns = [
             (re.compile(r"page\.goto\("), "navigate", True),

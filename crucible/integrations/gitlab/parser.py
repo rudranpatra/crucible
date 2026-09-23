@@ -6,7 +6,7 @@ Produces the same target dict format as GitHubActionsParser so all 6 agents work
 
 import yaml
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 class GitLabCIParser:
@@ -36,20 +36,22 @@ class GitLabCIParser:
         config = yaml.safe_load(content) or {}
         return self._build_target(config, name=name)
 
-    def _build_target(self, config: Dict, name: str, source_file: str = None) -> Dict:
+    def _build_target(self, config: Dict, name: str, source_file: Optional[str] = None) -> Dict:
         jobs = {
             k: v for k, v in config.items()
             if isinstance(v, dict) and k not in self.RESERVED and not k.startswith('.')
         }
 
-        env_vars, seen_vars = [], set()
+        env_vars: List[Dict] = []
+        seen_vars: set = set()
         global_vars = config.get('variables', {}) or {}
         for k, v in global_vars.items():
             env_vars.append(self._make_env_var(k, v))
             seen_vars.add(k)
 
-        steps, network_calls, dependencies = [], [], []
-
+        steps: List[Dict] = []
+        network_calls: List[str] = []
+        dependencies: List[Dict] = []
         for job_name, job in jobs.items():
             script_lines = self._collect_scripts(config, job)
             for i, line in enumerate(script_lines):
@@ -64,7 +66,7 @@ class GitLabCIParser:
                     'has_retry': bool(job.get('retry')),
                 }
                 net = self._detect_network(line)
-                step['network_calls'].extend(net)
+                step['network_calls'] = list(net)
                 network_calls.extend(net)
                 steps.append(step)
 

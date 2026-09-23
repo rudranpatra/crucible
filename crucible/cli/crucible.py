@@ -29,6 +29,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from typing import cast
 
 from crucible.runner import CrucibleRunner, ALL_ATTACKS, CloudExecutionError
 from crucible.integrations.github.commenter import generate_svg_badge
@@ -247,8 +248,8 @@ def cmd_badge(args):
         )
         sys.exit(1)
 
-    score = result['resilience_score']
-    grade = result['grade']
+    score = cast(float, result['resilience_score'])
+    grade = cast(str, result['grade'])
     svg = generate_svg_badge(score, grade)
 
     output = getattr(args, 'output', None)
