@@ -7,6 +7,30 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `--publish-cloud` was dead on arrival: `CrucibleCloudSink.publish` read
+  `result.recovery_time_ms`, a field `AttackResult` never had, so every
+  publish raised `AttributeError` — swallowed by the runner's per-attack
+  guard, so scans "succeeded" while nothing uploaded. `AttackResult` now
+  carries `recovery_time_ms` (defaults to `None`; no local agent measures it
+  yet). `crucible attack --publish-cloud` also now exits non-zero and prints
+  an error listing how many attack results failed to upload, instead of
+  exiting 0 on total upload failure.
+- `action.yml` bumped its pinned `crucible-gym` from `0.4.2` to `0.5.3`
+  (current stable) — the Action was running a known-stale release with a
+  full local adversarial engine long after 0.5.0 moved that engine to Cloud.
+  The attack subprocess launch is now also given an allowlisted environment
+  (`PATH`/`HOME`/`LANG`-family/`TMPDIR` plus the CI values crucible itself
+  reads) instead of the step's full inherited environment, so other
+  job-level secrets can't leak into it.
+
+### Added
+- **`crucible validate` is back** — `/v1/validate` now exists on Crucible
+  Cloud, so `crucible validate threatmodel.json --engine cloud` runs the
+  real `ThreatPlanner`/`ThreatValidator` engine again (Cloud-only, same
+  explicit `--engine cloud` requirement as `attack`/`audit`/`compare`).
+  `--demo`, `--target`, `--seed`, `--json`, `--include-mitigated` all work.
+
 ## [0.5.3] — Machine-readable JSON output
 
 ### Fixed
@@ -56,8 +80,8 @@ the project's internal architecture records for the full rationale and migration
 ### Removed
 - **`crucible validate`** — its threat-planning/validation engine
   (`ThreatPlanner`/`ThreatValidator`) moved to Cloud, which does not yet
-  expose an endpoint for it. Returns in a future release once
-  `/v1/validate` exists.
+  expose an endpoint for it. Returned in `[Unreleased]` above once
+  `/v1/validate` was built.
 - **`crucible trend`, `replay`, `patterns`, `evolution`, `serve`** — all
   depended on trace persistence and evolutionary scoring
   (`memory.trace_memory`, `scoring.darwin_scorer`) that moved to Cloud with

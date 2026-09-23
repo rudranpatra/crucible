@@ -47,6 +47,73 @@ class TestBasicSupplyChainAgent:
         assert BasicSupplyChainAgent().check(target) == []
 
 
+class TestUnsupportedFormatsNotScoredClean:
+    """Regression for the false-confidence bug: GitLab CI and Playwright
+    targets have no job.steps[].uses for BasicSupplyChainAgent to read, so it
+    used to silently find zero findings and the run reported a clean 100/A —
+    "we didn't look" indistinguishable from "we looked and it's clean"."""
+
+    def test_gitlab_target_is_marked_unsupported_not_clean(self):
+        target = {
+            "name": "real-gitlab-ci",
+            "type": "gitlab_ci",
+            "jobs": [{"name": "deploy", "runs_on": ["shared-runner"]}],
+            "steps": [{"name": "deploy_step0", "run": "curl -X POST $DEPLOY_URL"}],
+        }
+        findings = BasicSupplyChainAgent().check(target)
+        assert len(findings) == 1
+        assert findings[0].unsupported is True
+        assert findings[0].failure_triggered is False
+
+    def test_playwright_target_is_marked_unsupported_not_clean(self):
+        target = {
+            "name": "checkout.spec.ts",
+            "source_type": "playwright",
+            "jobs": [{"name": "playwright_tests", "runs_on": "browser"}],
+            "steps": [{"name": "navigate_line_1", "type": "navigate"}],
+        }
+        findings = BasicSupplyChainAgent().check(target)
+        assert len(findings) == 1
+        assert findings[0].unsupported is True
+
+    @pytest.mark.asyncio
+    async def test_runner_does_not_report_clean_score_for_gitlab_yaml(self, tmp_path):
+        gitlab_yaml = tmp_path / ".gitlab-ci.yml"
+        gitlab_yaml.write_text("""
+stages: [build, deploy]
+build:
+  stage: build
+  script:
+    - npm ci
+deploy:
+  stage: deploy
+  script:
+    - curl -X POST $DEPLOY_URL
+""")
+        runner = CrucibleRunner(verbose=False)
+        result = await runner.run(target_path=str(gitlab_yaml))
+        assert result["format_supported"] is False
+        assert result["grade"] != "A"
+        assert result["resilience_score"] != 100.0
+        assert result["unsupported_reasons"]
+
+    @pytest.mark.asyncio
+    async def test_runner_does_not_report_clean_score_for_playwright_spec(self, tmp_path):
+        spec = tmp_path / "checkout.spec.ts"
+        spec.write_text("""
+test('checkout works', async ({ page }) => {
+  await page.goto('https://example.com');
+  await page.click('[data-testid=checkout]');
+  await expect(page.locator('#confirm')).toBeVisible();
+});
+""")
+        runner = CrucibleRunner(verbose=False)
+        result = await runner.run(target_path=str(spec))
+        assert result["format_supported"] is False
+        assert result["grade"] != "A"
+        assert result["resilience_score"] != 100.0
+
+
 class TestBasicScorer:
     def test_no_findings_is_perfect_score(self):
         assert BasicScorer().score([]) == 100.0
@@ -104,3 +171,13 @@ class TestRunnerModeSelection:
             runner.patterns()
         with pytest.raises(NotImplementedError):
             runner.evolution()
+
+    def test_validate_requires_cloud(self):
+        runner = CrucibleRunner(verbose=False)
+        with pytest.raises(NotImplementedError):
+            runner.validate([{"id": "t1", "title": "x", "description": "x", "technique": "x"}])
+
+    def test_validate_cloud_mode_without_credentials_raises(self):
+        runner = CrucibleRunner(mode="cloud", cloud_url=None, api_key=None)
+        with pytest.raises(CloudExecutionError):
+            runner.validate([], demo_mode=True)

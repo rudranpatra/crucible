@@ -47,12 +47,16 @@ runs:
   steps:
     - name: Install Crucible
       shell: bash
-      # Pinned, not "crucible-gym --quiet": 0.5.0 split local mode down to a
-      # basic supply-chain check (see CHANGELOG.md) with a different scoring
-      # formula. Unpinned here would have silently changed every consumer's
-      # fail-below gate the moment 0.5.0 published. Bump this deliberately,
-      # with a version note in this repo's own CHANGELOG, not by default.
-      run: pip install crucible-gym==0.4.2 --quiet
+      # Pinned, not "crucible-gym --quiet": bump this deliberately, with a
+      # version note in this repo's own CHANGELOG, not by default — a bare
+      # `pip install crucible-gym` would silently change every consumer's
+      # fail-below gate (and, historically, their scoring formula) the
+      # moment a new release published. Bumped 0.4.2 -> 0.5.3 (current
+      # stable per CHANGELOG.md/pyproject.toml) to stop running a known-stale,
+      # unsandboxed local engine in consumer CI. See CHANGELOG.md for what
+      # changed along the way (0.5.0 split local mode down to a static
+      # supply-chain check; no live subprocess attacks run locally any more).
+      run: pip install crucible-gym==0.5.3 --quiet
 
     - name: Run adversarial attack
       id: run
@@ -67,7 +71,24 @@ runs:
         [ "${{ inputs.github-comment }}" = "true" ] && ARGS="$ARGS --github-comment"
         [ -n "${{ inputs.sarif-output }}" ] && ARGS="$ARGS --sarif ${{ inputs.sarif-output }}"
 
-        crucible attack $ARGS --json > /tmp/crucible_result.json || true
+        # ponytail: `crucible attack` (and anything it subprocess-spawns) gets
+        # an allowlisted env, not this step's full inherited environment —
+        # only what a process needs to launch, plus the three CI values
+        # crucible itself reads (GITHUB_TOKEN/GITHUB_REPOSITORY/PR_NUMBER, for
+        # --github-comment). Same pattern as mcp-proof's --no-env
+        # (tools/mcp-proof/bin/mcp-proof.js MINIMAL_LAUNCH_ENV): don't let
+        # other job-level secrets leak into an attack subprocess. This is a
+        # launch-env allowlist, not a sandbox — it doesn't stop a subprocess
+        # from reading the filesystem or network. Local mode (0.5.0+) runs no
+        # live subprocess attacks today (see CHANGELOG.md); full sandboxing
+        # of subprocess-executing attacks is Crucible Cloud's engine, a
+        # separate repo, and remains a known limitation of this Action if
+        # that engine is ever driven from here.
+        env -i \
+          PATH="$PATH" HOME="$HOME" LANG="$LANG" LC_ALL="$LC_ALL" \
+          TMPDIR="$TMPDIR" TEMP="$TEMP" TMP="$TMP" \
+          GITHUB_TOKEN="$GITHUB_TOKEN" GITHUB_REPOSITORY="$GITHUB_REPOSITORY" PR_NUMBER="$PR_NUMBER" \
+          crucible attack $ARGS --json > /tmp/crucible_result.json || true
 
         SCORE=$(python3 -c "import json; print(int(json.load(open('/tmp/crucible_result.json')).get('resilience_score', 0)))" 2>/dev/null || echo "0")
         GRADE=$(python3 -c "import json; print(json.load(open('/tmp/crucible_result.json')).get('grade', 'F'))" 2>/dev/null || echo "F")

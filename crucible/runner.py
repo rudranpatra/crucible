@@ -130,12 +130,25 @@ class CrucibleRunner:
                         logger.exception("on_attack_result callback failed; continuing run")
                 index += 1
 
-        score = self.scorer.score(findings)
-        grade = self.scorer.grade(score)
+        # A finding with unsupported=True means the check found no structure
+        # it knows how to analyze (e.g. GitLab CI / Playwright targets have
+        # no job.steps[].uses) — that's not the same as "analyzed and clean",
+        # so it must never collapse into a passing score/grade.
+        unsupported_findings = [f for f in findings if getattr(f, "unsupported", False)]
+        real_findings = [f for f in findings if not getattr(f, "unsupported", False)]
+        format_supported = not (unsupported_findings and not real_findings)
+
+        if format_supported:
+            score = self.scorer.score(real_findings)
+            grade = self.scorer.grade(score)
+        else:
+            score = None
+            grade = "UNSUPPORTED"
         self.engine.finalize_trace(trace, score)
 
-        failure_points = [f.failure_description for f in findings if f.failure_triggered and f.failure_description]
-        blast_radius = list({step for f in findings if f.failure_triggered for step in f.affected_steps})
+        failure_points = [f.failure_description for f in real_findings if f.failure_triggered and f.failure_description]
+        blast_radius = list({step for f in real_findings if f.failure_triggered for step in f.affected_steps})
+        unsupported_reasons = [f.failure_description for f in unsupported_findings if f.failure_description]
 
         result = {
             "trace_id": trace.trace_id,
@@ -144,6 +157,8 @@ class CrucibleRunner:
             "target": target["name"],
             "resilience_score": score,
             "grade": grade,
+            "format_supported": format_supported,
+            "unsupported_reasons": unsupported_reasons,
             "components": {},
             "failure_count": len(failure_points),
             "blast_radius": blast_radius,
@@ -156,7 +171,13 @@ class CrucibleRunner:
             "failure_points": failure_points,
         }
         self._log("=" * 50)
-        self._log(f"Resilience: {score:.0f}/100  [{grade}]  (local mode, {len(valid_attacks)} attack(s))")
+        if format_supported:
+            self._log(f"Resilience: {score:.0f}/100  [{grade}]  (local mode, {len(valid_attacks)} attack(s))")
+        else:
+            self._log(
+                f"UNSUPPORTED: local static analysis found nothing to check in this "
+                f"target format — not scored. ({'; '.join(unsupported_reasons)})"
+            )
         self._log("=" * 50)
         return result
 
@@ -198,6 +219,48 @@ class CrucibleRunner:
 
     def evolution(self) -> Dict:
         raise NotImplementedError("evolution requires mode='cloud'")
+
+    def validate(
+        self,
+        threats: List[Dict[str, Any]],
+        target_path: Optional[str] = None,
+        demo_mode: bool = False,
+        seed: Optional[int] = None,
+    ) -> Dict:
+        """Runs ThreatPlanner + ThreatValidator against Cloud's /v1/validate.
+
+        Cloud-only: the backing engine (ThreatPlanner/ThreatValidator) moved
+        there in the OSS/Cloud split and has no local equivalent — see
+        CODEX_OSS_CLOUD_SPLIT.md. threats is a list of plain dicts (the shape
+        ThreatDragonImporter/Threat.to_dict() already produce); only
+        id/title/description/framework/technique/severity/component/source
+        are read server-side, evidence/status/attack_plan are always
+        server-computed.
+        """
+        if self.mode != "cloud":
+            raise NotImplementedError("validate requires mode='cloud' — no local ThreatValidator equivalent")
+        if not self.cloud_url or not self.api_key:
+            raise CloudExecutionError(
+                "mode='cloud' requires CRUCIBLE_CLOUD_URL and CRUCIBLE_API_KEY "
+                "(env vars, or cloud_url=/api_key= to CrucibleRunner)"
+            )
+        payload = json.dumps({
+            "threats": threats,
+            "target_path": target_path,
+            "demo_mode": demo_mode,
+            "seed": seed,
+        }).encode()
+        req = urllib.request.Request(
+            self.cloud_url.rstrip("/") + "/v1/validate",
+            data=payload,
+            method="POST",
+            headers={"Content-Type": "application/json", "x-api-key": self.api_key},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return json.loads(resp.read())
+        except urllib.error.URLError as e:
+            raise CloudExecutionError(f"cloud validate failed: {e}") from e
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

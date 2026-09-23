@@ -65,7 +65,7 @@ class LocalEngine:
     def record_event(self, trace: LocalTrace, event: LocalAttackEvent) -> None:
         trace.events.append(event)
 
-    def finalize_trace(self, trace: LocalTrace, score: float) -> LocalTrace:
+    def finalize_trace(self, trace: LocalTrace, score: Optional[float]) -> LocalTrace:
         trace.finished_at = time.time()
         trace.resilience_score = score
         return trace

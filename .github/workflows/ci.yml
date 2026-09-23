@@ -89,19 +89,13 @@ jobs:
       - name: Install
         run: pip install -e ".[web]"
       - name: Run Crucible self-attack and post PR comment
-        working-directory: crucible
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.number }}
-        run: |
-          python -c "
-          import asyncio, sys
-          sys.path.insert(0, '.')
-          from runner import CrucibleRunner
-          async def main():
-              r = CrucibleRunner(verbose=False)
-              result = await r.run(demo_mode=True, github_comment=True)
-              print(f'Score: {result[\"resilience_score\"]}/100 ({result[\"grade\"]})')
-          asyncio.run(main())
-          "
+        # `CrucibleRunner.run()` has no `github_comment` kwarg — that flag is
+        # a CLI-only option (crucible/cli/crucible.py) that posts the PR
+        # comment itself after the run completes. Go through the real CLI
+        # entrypoint instead of hand-rolling a call that doesn't match the
+        # runner's actual signature.
+        run: crucible attack --demo --github-comment

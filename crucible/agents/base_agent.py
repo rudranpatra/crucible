@@ -18,6 +18,19 @@ class AttackResult:
     affected_steps: List[str] = field(default_factory=list)
     attack_type: str = ""
     mutation_applied: Dict[str, Any] = field(default_factory=dict)
+    # ponytail: local agents don't measure recovery time (no real subprocess
+    # timing to recover from); kept as None so CrucibleCloudSink.publish
+    # (crucible/sinks/crucible_cloud_sink.py) can read this attribute without
+    # an AttributeError — that AttributeError was the actual --publish-cloud
+    # bug (READINESS_REPORT.md P0-1). Populate for real once a local agent
+    # measures it.
+    recovery_time_ms: Optional[float] = None
+    # True only for the explicit "this target has no structure this check
+    # knows how to read" marker (see BasicSupplyChainAgent.check) — lets the
+    # scorer/runner distinguish "we looked at N steps and found nothing" from
+    # "we found nothing to look at", so the latter never reports a clean
+    # 100/A. Never set alongside a real (failure_triggered=True) finding.
+    unsupported: bool = False
 
 
 class BaseLocalAgent(ABC):

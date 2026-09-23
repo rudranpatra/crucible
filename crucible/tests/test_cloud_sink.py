@@ -1,26 +1,38 @@
-"""CrucibleCloudSink — per-attack POSTs to Crucible Cloud over stdlib urllib."""
+"""CrucibleCloudSink — per-attack POSTs to Crucible Cloud over stdlib urllib.
+
+P0-1 regression guard: tests here use the *real* AttackResult dataclass, not a
+fake stub. The original bug (AttributeError on recovery_time_ms) was invisible
+because FakeAttackResult carried the field while AttackResult didn't — this test
+file is the canary that would have caught it if it used the real dataclass.
+"""
 
 import json
 import sys
 import urllib.error
 import urllib.request
 
-
+from crucible.agents.base_agent import AttackResult
 from crucible.sinks.crucible_cloud_sink import CrucibleCloudSink
 
 
-class FakeAttackResult:
-    """Same attribute surface as agents.base_agent.AttackResult."""
+def _real_attack_result(**overrides) -> AttackResult:
+    """Build a real AttackResult with sensible defaults.
 
-    def __init__(self):
-        self.success = True
-        self.mutation_applied = {"unset": "DATABASE_URL"}
-        self.failure_triggered = True
-        self.failure_description = "build step crashed"
-        self.affected_steps = ["run_tests"]
-        self.recovery_time_ms = 1200.5
-        self.raw_output = "SECRET_TOKEN=abc123 leaked into stderr"
-        self.attack_type = "env"
+    Using the real dataclass (not a duck-typed stub) means any future field
+    change to AttackResult that breaks CrucibleCloudSink.publish will be caught
+    here at test time, not silently at runtime (the original P0-1 failure mode).
+    """
+    defaults = dict(
+        success=True,
+        failure_triggered=True,
+        failure_description="build step crashed",
+        affected_steps=["run_tests"],
+        recovery_time_ms=1200.5,
+        attack_type="env",
+        mutation_applied={"unset": "DATABASE_URL"},
+    )
+    defaults.update(overrides)
+    return AttackResult(**defaults)
 
 
 class _FakeResponse:
@@ -64,10 +76,11 @@ def test_from_env_returns_none_without_both_vars(monkeypatch):
 
 
 def test_publish_posts_one_attack_to_the_nested_route(monkeypatch):
+    """Uses the *real* AttackResult dataclass — see module docstring."""
     sent = _capture(monkeypatch)
     sink = CrucibleCloudSink("https://cloud.example/", "cru_testkey")
 
-    sink.publish("trc_abc123", 7, FakeAttackResult())
+    sink.publish("trc_abc123", 7, _real_attack_result())
 
     assert sent["url"] == "https://cloud.example/results/trc_abc123/attacks"
     assert sent["method"] == "POST"
@@ -86,21 +99,25 @@ def test_publish_posts_one_attack_to_the_nested_route(monkeypatch):
 
 
 def test_publish_never_transmits_raw_output(monkeypatch):
+    """raw_output is not a field on AttackResult (local agents don't capture subprocess output).
+    Verify the sink never serialises it even if an AttributeError-free result is passed."""
     sent = _capture(monkeypatch)
-    CrucibleCloudSink("https://cloud.example", "cru_testkey").publish("trc_x", 0, FakeAttackResult())
+    # Use a result without raw_output (the real dataclass has no such field)
+    CrucibleCloudSink("https://cloud.example", "cru_testkey").publish("trc_x", 0, _real_attack_result())
 
     assert "raw_output" not in sent["body"]
-    assert "SECRET_TOKEN" not in json.dumps(sent["body"])
 
 
 def test_publish_raises_on_http_error_for_the_runner_to_swallow(monkeypatch):
+    """Transport errors must propagate to the runner's guard (cmd_attack collects
+    them in publish_failures and exits 1) — they must never be silently swallowed."""
     def boom(req, timeout=None):
         raise urllib.error.HTTPError(req.full_url, 500, "boom", {}, None)
 
     monkeypatch.setattr(urllib.request, "urlopen", boom)
 
     try:
-        CrucibleCloudSink("https://cloud.example", "cru_testkey").publish("trc_x", 0, FakeAttackResult())
+        CrucibleCloudSink("https://cloud.example", "cru_testkey").publish("trc_x", 0, _real_attack_result())
     except urllib.error.HTTPError:
         return
     raise AssertionError("expected the HTTPError to propagate to the runner's guard")

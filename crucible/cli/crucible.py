@@ -14,10 +14,11 @@ Usage (--engine cloud — full 6-agent engine, requires CRUCIBLE_CLOUD_URL +
 CRUCIBLE_API_KEY):
   crucible attack --demo --engine cloud
   crucible attack --target workflow.yml --attacks timing,env,network --engine cloud --github-comment
+  crucible validate threatmodel.json --engine cloud --demo
 
 Not available in this release (moved to Cloud, no local or CLI-callable
 Cloud equivalent yet — see CHANGELOG.md): trend, replay, patterns,
-evolution, serve, validate.
+evolution, serve.
 """
 
 import asyncio
@@ -65,6 +66,7 @@ def cmd_attack(args):
     # of which engine ran it. It is unrelated to --engine cloud, which decides
     # WHERE the attack itself executes.
     on_attack_result = None
+    publish_failures = []
     if getattr(args, 'publish_cloud', False):
         from crucible.sinks.crucible_cloud_sink import CrucibleCloudSink
         sink = CrucibleCloudSink.from_env()
@@ -74,7 +76,18 @@ def cmd_attack(args):
                 file=sys.stderr,
             )
             sys.exit(1)
-        on_attack_result = sink.publish
+
+        def on_attack_result(trace_id, index, result):
+            # The runner swallows exceptions from this callback so one bad
+            # upload can't fail the whole attack run (see runner.py) — but
+            # that means failures must be tracked here, not just logged, or
+            # --publish-cloud can silently no-op on every attack. Re-raise so
+            # the runner's existing log line still fires.
+            try:
+                sink.publish(trace_id, index, result)
+            except Exception as e:
+                publish_failures.append(str(e))
+                raise
 
     try:
         result = asyncio.run(runner.run(
@@ -111,9 +124,22 @@ def cmd_attack(args):
         out = {k: v for k, v in result.items() if k != 'shadow_summary'}
         print(json.dumps(out, indent=2))
     elif args.quiet:
-        print(f"{result['resilience_score']:.0f}/100 ({result['grade']}) — {result['trace_id']}")
+        if result.get("format_supported", True):
+            print(f"{result['resilience_score']:.0f}/100 ({result['grade']}) — {result['trace_id']}")
+        else:
+            reasons = "; ".join(result.get("unsupported_reasons", []))
+            print(f"UNSUPPORTED ({result['grade']}) — {result['trace_id']} — {reasons}")
     else:
         print(f"Seed: {result['seed']}  (re-run: --seed {result['seed']})")
+
+    if publish_failures:
+        print(
+            f"Error: --publish-cloud failed for {len(publish_failures)} attack result(s); "
+            "results were NOT uploaded to Crucible Cloud. See the ERROR log lines above "
+            f"for details (first: {publish_failures[0]}).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 # replay / patterns / evolution — removed for 0.5.0. Their backing store
@@ -297,6 +323,49 @@ def cmd_compare(args):
 
 # trend / serve — removed for 0.5.0, same reason as replay/patterns/evolution.
 
+
+# ── validate ──────────────────────────────────────────────────────────────────
+
+def cmd_validate(args):
+    """Import a threat model and validate it against Cloud's real attack
+    engine. Cloud-only (see runner.CrucibleRunner.validate) — restored now
+    that /v1/validate exists; still requires --engine cloud explicitly,
+    same as every other cloud-only feature, never a silent fallback."""
+    if _engine_mode(args) != "cloud":
+        _cloud_only("validate")
+
+    from crucible.threats.importer import ThreatDragonImporter
+
+    threats = ThreatDragonImporter().import_file(
+        args.threat_model, include_mitigated=args.include_mitigated,
+    )
+    threat_dicts = [t.to_dict() for t in threats]
+
+    runner = CrucibleRunner(verbose=not args.json, mode="cloud")
+    try:
+        report = runner.validate(
+            threat_dicts,
+            target_path=args.target if not args.demo else None,
+            demo_mode=args.demo or not args.target,
+            seed=getattr(args, "seed", None),
+        )
+    except CloudExecutionError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return
+
+    print(f"\nThreat Validation: {report['target']}")
+    print("-" * 60)
+    print(f"Coverage: {report['coverage']:.0f}%  "
+          f"(pass={report['passed']} fail={report['failed']} untested={report['untested']})")
+    for t in report["threats"]:
+        icon = {"pass": "✅", "fail": "❌", "untested": "⚠️"}.get(t["status"], "?")
+        print(f"  {icon} [{t['status'].upper()}] {t['title']} ({t['plan_rationale'] or 'no plan'})")
+    print(f"\nTrace: {report['trace_id']}  (replay: {report['replay_command'] or 'not available'})")
+
 # ── status ────────────────────────────────────────────────────────────────────
 
 def cmd_status(args):
@@ -326,8 +395,9 @@ examples (--engine cloud — full 6-agent engine, requires
 CRUCIBLE_CLOUD_URL + CRUCIBLE_API_KEY):
   crucible attack --demo --engine cloud
   crucible compare HEAD~1 HEAD --engine cloud
+  crucible validate threatmodel.json --engine cloud --demo
 
-Not in this release (see CHANGELOG.md): validate, trend, replay, patterns,
+Not in this release (see CHANGELOG.md): trend, replay, patterns,
 evolution, serve, --rich, --shadow.
         """,
     )
@@ -390,11 +460,17 @@ evolution, serve, --rich, --shadow.
     # status
     subparsers.add_parser('status', help='Show Crucible status and stored trace summary')
 
-    # validate — removed for 0.5.0: its backing ThreatPlanner/ThreatValidator
-    # moved to Cloud, and Cloud has no /v1/validate endpoint yet to call
-    # instead. Shipping a documented subcommand that always fails is worse
-    # than not shipping it; it returns once /v1/validate exists (see
-    # CODEX_OSS_CLOUD_SPLIT.md open questions and CHANGELOG.md).
+    # validate — Cloud-only (requires --engine cloud); restored now that
+    # /v1/validate exists (see CODEX_OSS_CLOUD_SPLIT.md open questions).
+    vp = subparsers.add_parser('validate', help='Validate a threat model against Cloud\'s real attack engine (requires --engine cloud)')
+    vp.add_argument('threat_model', help='Path to a Threat Dragon JSON export')
+    vp.add_argument('--include-mitigated', action='store_true', dest='include_mitigated',
+                     help='Also validate threats marked Mitigated/NotApplicable (default: skip them)')
+    vp.add_argument('--target', '-t', help='Path to workflow file (.yml, .gitlab-ci.yml, .spec.ts)')
+    vp.add_argument('--demo', action='store_true', help='Run with synthetic demo target')
+    vp.add_argument('--seed', type=int, help='Fixed random seed for deterministic replay')
+    vp.add_argument('--json', '-j', action='store_true', help='Output full report as JSON')
+    vp.add_argument('--engine', choices=['local', 'cloud'], help='Execution engine (validate requires cloud)')
 
     args = parser.parse_args()
 
@@ -411,6 +487,7 @@ evolution, serve, --rich, --shadow.
         'compare': cmd_compare,
         'badge': cmd_badge,
         'status': cmd_status,
+        'validate': cmd_validate,
     }
     dispatch[args.command](args)
 
