@@ -188,6 +188,12 @@ def cmd_audit(args):
             attacks=audit_attacks,
         ))
 
+        if not result.get('format_supported', True):
+            reasons = "; ".join(result.get('unsupported_reasons', []))
+            print(f"⚠  UNSUPPORTED target — not scored. ({reasons})")
+            print(f"   Trace: {result['trace_id']}")
+            continue
+
         score = result['resilience_score']
         grade = result['grade']
         grade_color = {'A': '✅', 'B': '✅', 'C': '⚠️', 'D': '❌', 'F': '❌'}.get(grade, '❌')
@@ -230,6 +236,15 @@ def cmd_badge(args):
         }
     else:
         print("Provide --target <workflow.yml> or --score <0-100>", file=sys.stderr)
+        sys.exit(1)
+
+    if not result.get('format_supported', True):
+        reasons = "; ".join(result.get('unsupported_reasons', ["unsupported target format"]))
+        print(
+            f"Error: cannot generate badge — target format is unsupported (no score). "
+            f"({reasons})",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     score = result['resilience_score']
@@ -275,6 +290,21 @@ def cmd_compare(args):
             os.unlink(tmp)
 
     r1, r2 = results[ref1], results[ref2]
+
+    # Guard: unsupported targets (GitLab/Playwright) return score=None.
+    # Compare needs two numeric scores to compute a delta; refuse clearly.
+    if not r1.get('format_supported', True) or not r2.get('format_supported', True):
+        unsupported_ref = ref1 if not r1.get('format_supported', True) else ref2
+        reasons = "; ".join(
+            results[unsupported_ref].get('unsupported_reasons', ["target format unsupported"])
+        )
+        print(
+            f"Error: cannot compare — {unsupported_ref} has an unsupported target format. "
+            f"({reasons})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     s1, s2 = r1['resilience_score'], r2['resilience_score']
     delta = s2 - s1
     direction = "↑" if delta >= 0 else "↓"
