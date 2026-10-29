@@ -5,7 +5,7 @@
 
 `crucible-gym` is an open-source package with a basic local engine and a client for the optional, self-hosted Crucible Cloud.
 
-See [crucible/README.md](crucible/README.md) for installation, commands, architecture, and the 0.5.x OSS/Cloud split. For a tested customer walkthrough, see [CUSTOMER_DEMO.md](CUSTOMER_DEMO.md).
+See [crucible/README.md](crucible/README.md) for installation, commands, architecture, and the 0.5.x OSS/Cloud split. For a runnable, self-checking local demo, run `bash scripts/customer_demo.sh` after installing.
 
 - PyPI: https://pypi.org/project/crucible-gym/
 - License: [Apache 2.0](LICENSE)

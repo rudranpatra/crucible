@@ -4,7 +4,7 @@
 > Measure whether it gets more resilient or less resilient over time.
 
 [![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
-[![Tests](https://img.shields.io/badge/tests-97%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)](tests/)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](../LICENSE)
 
@@ -279,7 +279,7 @@ crucible/
 │   └── crucible_cloud_sink.py  # --publish-cloud: streams per-attack results to Cloud's ingest API
 ├── runner.py               # Mode-aware: local basic engine, or HTTP client to Cloud's /v1/runs
 ├── cli/crucible.py         # CLI — audit, attack, compare, badge, status
-└── tests/                  # 97 passing tests
+└── tests/                  # 103 passing tests
 
 # Moved to crucible-cloud/app/engine/ (not in this repo):
 # core/engine.py, core/shadow_runner.py, attacks/strategies.py (5 of 6
