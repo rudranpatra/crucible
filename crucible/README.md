@@ -1,7 +1,6 @@
 # Crucible
 
-> Run adversarial experiments against your CI/CD pipeline.  
-> Measure whether it gets more resilient or less resilient over time.
+> Local mode: offline static audit for mutable third-party GitHub Actions references.
 
 [![PyPI](https://img.shields.io/pypi/v/crucible-gym)](https://pypi.org/project/crucible-gym/)
 [![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)](tests/)
@@ -17,7 +16,9 @@
 > all-local behavior, pin `crucible-gym==0.4.2`. Full details:
 > [CHANGELOG.md](../CHANGELOG.md#050--osscloud-engine-split).
 
-Traditional scanners validate configuration. Crucible validates behavior under adversarial conditions. The two approaches are complementary — scanners find misconfigurations, Crucible finds what breaks when the pipeline is stressed.
+> **Current product boundary:** the customer-facing 0.5.4 package provides the local static check. Crucible Cloud is a separate private, self-hosted pilot with no public hosted endpoint. Its optional run and validation APIs and six-agent engine are not a generally available or customer-validated service; do not treat this README's Cloud descriptions as a hosted product claim. The recommended pilot runs Crucible locally and uploads only a reviewed result summary.
+
+The published local mode checks workflow configuration for mutable Action references. It does not execute customer workflow commands, contact the network, or test behavior under adversarial conditions.
 
 ```bash
 pip install crucible-gym
@@ -305,7 +306,6 @@ python3 -m pytest crucible/tests/ -v
 
 # Demo
 crucible attack --demo
-```
 
 Tests cover: the local basic engine, basic scorer, basic supply-chain agent, mode-selection on `CrucibleRunner` (including that shadow/rich modes fail explicitly rather than silently), GitHub commenter, SVG badge, SARIF export, GitLab CI parser, Playwright parser, and the `--publish-cloud` sink.
 

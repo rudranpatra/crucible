@@ -1,11 +1,10 @@
 # Crucible
 
-> Run adversarial experiments against your CI/CD pipeline.  
-> Measure whether it gets more resilient or less resilient over time.
+> A local, offline static check for mutable third-party GitHub Actions references.
 
-`crucible-gym` is an open-source package with a basic local engine and a client for the optional, self-hosted Crucible Cloud.
+`crucible-gym` 0.5.4's local mode audits workflow YAML for Actions referenced by mutable tags or branches. It does not execute workflow commands or contact the network. Crucible Cloud is a separate private, self-hosted pilot, not a public hosted service or a generally available six-agent engine. Its recommended pilot path is local execution with explicit result-summary upload.
 
-See [crucible/README.md](crucible/README.md) for installation, commands, architecture, and the 0.5.x OSS/Cloud split. For a runnable, self-checking local demo, run `bash scripts/customer_demo.sh` after installing.
+See [crucible/README.md](crucible/README.md) for package details and the OSS/Cloud split. For the verified local customer demo, see [CUSTOMER_DEMO.md](CUSTOMER_DEMO.md).
 
 - PyPI: https://pypi.org/project/crucible-gym/
 - License: [Apache 2.0](LICENSE)
